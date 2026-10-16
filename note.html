@@ -74,6 +74,9 @@
 </div>
 
 <script src="config.js"></script>
+<script src="js/store.js"></script>
+<script src="js/shell.js"></script>
+<script src="player.js"></script>
 <script>
 (function () {
   var g = SITE_CONFIG.global;
@@ -86,6 +89,7 @@
   root.style.setProperty('--text-color', g.textColor);
   root.style.setProperty('--paper-color', n.paperColor);
   document.title = g.siteTitle + ' · ' + n.pageTitle;
+  LN.boot({ deco: true });
 
   /* 文案注入 */
   document.getElementById('pageTitle').textContent = n.title;
@@ -188,18 +192,6 @@
     document.head.appendChild(style);
   }
 
-  /* 漂浮装饰 */
-  var deco = document.getElementById('floatDeco');
-  var symbols = ['🔪', '💗', '✨', '💌'];
-  for (var i = 0; i < 10; i++) {
-    var s = document.createElement('span');
-    s.textContent = symbols[i % symbols.length];
-    s.style.left = (Math.random() * 100) + '%';
-    s.style.fontSize = (12 + Math.random() * 14) + 'px';
-    s.style.animationDuration = (10 + Math.random() * 14) + 's';
-    s.style.animationDelay = (-Math.random() * 16) + 's';
-    deco.appendChild(s);
-  }
 })();
 </script>
 </body>

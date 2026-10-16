@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 浅紫浅粉底 -->
+    <path
+        android:fillColor="#F6EAFF"
+        android:pathData="M0,0h108v108h-108z" />
+    <!-- 爱心 -->
+    <path
+        android:fillColor="#FFA8CD"
+        android:pathData="M54,86C54,86 14,60 14,38A20,20 0 0 1 54,32A20,20 0 0 1 94,38C94,60 54,86 54,86Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.35"
+        android:pathData="M38,34A12,12 0 0 1 54,32A20,20 0 0 1 94,38C94,44 86,51 76,57A20,20 0 0 1 38,34Z" />
+</vector>

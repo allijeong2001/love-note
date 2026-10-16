@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>一起听</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="float-deco" id="floatDeco"></div>
+
+<div class="page" style="padding-top:14px">
+  <header class="topbar">
+    <a class="back-btn" href="index.html" aria-label="返回主页">←</a>
+    <span class="topbar-title" id="pageTitle">一起听</span>
+  </header>
+
+  <div class="music-room">
+
+    <!-- 两个人 + 连接 -->
+    <div class="duo">
+      <button class="duo-av him" id="hisAvBtn" type="button" title="换他的头像">
+        <span class="duo-pulse"></span>
+        <span class="duo-img" id="hisAvImg"></span>
+        <span class="duo-edit">📷</span>
+      </button>
+      <div class="duo-link">
+        <span class="duo-star">🐤</span>
+        <i></i>
+      </div>
+      <button class="duo-av me" id="myAvBtn" type="button" title="换我的头像">
+        <span class="duo-pulse"></span>
+        <span class="duo-img" id="myAvImg"></span>
+        <span class="duo-edit">📷</span>
+      </button>
+    </div>
+
+    <div class="listen-badge" id="listenBadge"></div>
+
+    <!-- 唱片 -->
+    <div class="disc-wrap">
+      <div class="disc" id="disc"><span class="disc-candy" id="discCandy">🐤</span></div>
+    </div>
+
+    <!-- 曲目信息 -->
+    <div class="track-name" id="trackName"></div>
+    <div class="track-sub" id="trackSub"></div>
+
+    <!-- 进度条 -->
+    <div class="music-progress">
+      <span id="curTime">0:00</span>
+      <div class="prog-bar" id="progBar"><div class="prog-fill" id="progFill"></div></div>
+      <span id="durTime">0:00</span>
+    </div>
+
+    <!-- 控制按钮 -->
+    <div class="music-controls">
+      <button class="mc-btn" id="back15Btn" type="button" title="后退15秒">↺15</button>
+      <button class="mc-play" id="playBtn" type="button">▶</button>
+      <button class="mc-btn" id="fwd15Btn" type="button" title="前进15秒">15↻</button>
+    </div>
+
+    <!-- 音量 -->
+    <div class="music-volume">🔈
+      <input type="range" id="volRange" min="0" max="100" value="90">
+    </div>
+
+    <button class="music-import" id="importBtn" type="button"></button>
+    <input type="file" id="audioFile" accept="audio/*" hidden>
+
+    <!-- 他说话 -->
+    <div class="him-talk" id="himTalk"></div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="js/store.js"></script>
+<script src="js/shell.js"></script>
+<script src="js/avatar.js"></script>
+<script src="player.js"></script>
+<script>
+(function () {
+  var m = LN.cfg().music || {};
+  LN.boot({ title: m.pageTitle || '一起听' });
+
+  var HIS = m.partnerName || (LN.cfg().chat && LN.cfg().chat.partnerName) || '查理苏';
+  var MY = m.userName || (LN.cfg().chat && LN.cfg().chat.userName) || '姜宁';
+
+  document.getElementById('pageTitle').textContent = m.pageTitle || '一起听';
+  document.getElementById('listenBadge').textContent =
+    (m.statusText || '正在和') + ' ' + HIS + ' ' + (m.statusSuffix || '一起听 ♪');
+  if (m.discCandy) document.getElementById('discCandy').textContent = m.discCandy;
+
+  var P = window.LNPlayer;
+  var audio = P.audio;
+  var esc = LN.esc;
+
+  /* ---------------- 头像 ---------------- */
+  function renderAvatars() {
+    document.getElementById('hisAvImg').innerHTML = LN.avatarHtml('him');
+    document.getElementById('myAvImg').innerHTML = LN.avatarHtml('me');
+  }
+  LN.bindAvatarButton(document.getElementById('hisAvBtn'), 'him');
+  LN.bindAvatarButton(document.getElementById('myAvBtn'), 'me');
+  LN.onAvatarChange(renderAvatars);
+
+  /* ---------------- 播放器 UI ---------------- */
+  var playBtn = document.getElementById('playBtn');
+  var disc = document.getElementById('disc');
+  var nameEl = document.getElementById('trackName');
+  var subEl = document.getElementById('trackSub');
+  var curTimeEl = document.getElementById('curTime');
+  var durTimeEl = document.getElementById('durTime');
+  var progFill = document.getElementById('progFill');
+  var progBar = document.getElementById('progBar');
+  var volRange = document.getElementById('volRange');
+  var importBtn = document.getElementById('importBtn');
+  var audioFile = document.getElementById('audioFile');
+  var himTalk = document.getElementById('himTalk');
+
+  function fmt(t) {
+    t = Math.max(0, Math.floor(t || 0));
+    var mm = Math.floor(t / 60), s = t % 60;
+    return mm + ':' + (s < 10 ? '0' + s : s);
+  }
+
+  function update() {
+    var has = P.hasTrack();
+    nameEl.textContent = has ? P.getName() : (m.emptyName || '还没有导入音频');
+    subEl.textContent = has
+      ? ((m.statusText || '正在和') + ' ' + HIS + ' ' + (m.statusSuffix || '一起听 ♪'))
+      : (m.emptyTip || '点下面的按钮，选一首你们都喜欢的歌吧');
+    importBtn.textContent = has ? (m.changeButton || '🎵 换一首') : (m.importButton || '🎵 导入音频');
+    var playing = has && !audio.paused;
+    playBtn.textContent = playing ? '⏸' : '▶';
+    disc.classList.toggle('playing', playing);
+    curTimeEl.textContent = fmt(audio.currentTime);
+    durTimeEl.textContent = fmt(audio.duration);
+    var dur = audio.duration || 0;
+    progFill.style.width = (dur ? (audio.currentTime / dur) * 100 : 0) + '%';
+    /* 别处改了音量（比如迷你条那边的记忆值）时也把滑块同步过来 */
+    if (document.activeElement !== volRange && audio.volume != null) {
+      volRange.value = Math.round(audio.volume * 100);
+    }
+  }
+  P.onChange(update);
+  setInterval(update, 500);
+
+  playBtn.addEventListener('click', function () {
+    if (!P.hasTrack()) { audioFile.click(); return; }
+    P.toggle();
+  });
+
+  document.getElementById('back15Btn').addEventListener('click', function () {
+    P.seek((audio.currentTime || 0) - 15);
+  });
+  document.getElementById('fwd15Btn').addEventListener('click', function () {
+    P.seek((audio.currentTime || 0) + 15);
+  });
+
+  /* 进度条：点一下跳过去，按住还能拖着走 */
+  function seekAt(clientX) {
+    var dur = audio.duration || 0;
+    if (!dur) return;
+    var rect = progBar.getBoundingClientRect();
+    var ratio = Math.min(1, Math.max(0, (clientX - rect.left) / (rect.width || 1)));
+    P.seek(ratio * dur);
+  }
+  var dragging = false;
+  progBar.addEventListener('pointerdown', function (e) {
+    dragging = true;
+    try { progBar.setPointerCapture(e.pointerId); } catch (err) {}
+    seekAt(e.clientX);
+    e.preventDefault();
+  });
+  progBar.addEventListener('pointermove', function (e) {
+    if (dragging) seekAt(e.clientX);
+  });
+  progBar.addEventListener('pointerup', function (e) {
+    if (dragging) { dragging = false; seekAt(e.clientX); }
+  });
+  progBar.addEventListener('pointercancel', function () { dragging = false; });
+  progBar.addEventListener('click', function (e) { if (!dragging) seekAt(e.clientX); });
+
+  /* 音量：拖动即时生效，松手后记住 */
+  volRange.value = Math.round((audio.volume != null ? audio.volume : 0.9) * 100);
+  function applyVolume() {
+    var v = Number(volRange.value) / 100;
+    P.setVolume(v);
+    volRange.title = Math.round(v * 100) + '%';
+  }
+  volRange.addEventListener('input', applyVolume);
+  volRange.addEventListener('change', applyVolume);
+
+  importBtn.addEventListener('click', function () { audioFile.click(); });
+
+  audioFile.addEventListener('change', function () {
+    var f = audioFile.files && audioFile.files[0];
+    audioFile.value = '';
+    if (!f) return;
+    importBtn.disabled = true;
+    importBtn.textContent = '导入中…';
+    P.setTrack(f.name, f);
+    importBtn.disabled = false;
+    update();
+    setTimeout(showTalk, 1800);
+  });
+
+  /* ---------------- 他说话 ---------------- */
+  var talkList = m.talkList || [];
+  var talkTimer = null;
+
+  function showTalk() {
+    if (!talkList.length || audio.paused || !P.hasTrack()) return;
+    himTalk.textContent = talkList[Math.floor(Math.random() * talkList.length)];
+    himTalk.classList.add('show');
+  }
+
+  /* 壳层里 audio 是桥接对象，没有 addEventListener，
+   * 所以统一在 update() 里看播放状态的变化来开关定时器 */
+  var wasPlaying = false;
+  function watchPlaying() {
+    var playing = P.hasTrack() && !audio.paused;
+    if (playing && !wasPlaying) {
+      showTalk();
+      clearInterval(talkTimer);
+      talkTimer = setInterval(showTalk, 30000);
+    } else if (!playing && wasPlaying) {
+      clearInterval(talkTimer);
+    }
+    wasPlaying = playing;
+  }
+  P.onChange(watchPlaying);
+  setInterval(watchPlaying, 500);
+
+  /* ---------------- 初始 ---------------- */
+  renderAvatars();
+  himTalk.textContent = P.hasTrack()
+    ? '接着上次的进度，我们继续听 ♪'
+    : (MY + '，选首歌，我们一起听');
+  himTalk.classList.add('show');
+  update();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>他的朋友圈</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="float-deco" id="floatDeco"></div>
+
+<div class="page" style="padding-top:12px;padding-bottom:96px">
+  <header class="topbar">
+    <a class="back-btn" href="index.html" aria-label="返回主页">←</a>
+    <span class="topbar-title" id="pageTitle"></span>
+    <span class="spacer"></span>
+    <button class="chip-btn" id="cardBtn" type="button">🃏 <span id="cardBtnLabel">字卡库</span></button>
+  </header>
+
+  <div class="moments-wrap">
+    <div class="moments-cover">
+      <span class="cover-img" id="coverImg"></span>
+      <svg class="cover-bird" id="coverBird" viewBox="0 0 72 72"><use href="#ln-bird"/></svg>
+      <button class="cover-edit" id="coverBtn" type="button">📷 换封面</button>
+    </div>
+    <div class="moments-profile">
+      <button class="avatar-btn" id="hisAvatarBtn" type="button" title="换他的头像">
+        <span class="avatar-lg" id="hisAvatar"></span>
+        <span class="avatar-edit">📷</span>
+      </button>
+      <span class="p-name" id="mName"></span>
+      <button class="avatar-btn sm" id="myAvatarBtn" type="button" title="换我的头像">
+        <span class="avatar-sm" id="myAvatar"></span>
+        <span class="avatar-edit sm">📷</span>
+      </button>
+    </div>
+    <div class="center muted" id="bjClock" style="margin-bottom:10px"></div>
+    <div class="moments-feed" id="feed"></div>
+  </div>
+</div>
+
+<div class="moments-bar">
+  <button class="btn" id="genBtn" type="button"></button>
+  <button class="btn ghost" id="postBtn" type="button"></button>
+</div>
+
+<!-- 我也发一条 -->
+<div class="mask" id="postMask"></div>
+<div class="dialog" id="postDialog">
+  <div class="panel-head">
+    <span class="panel-title">我也发一条</span>
+    <button class="icon-btn" id="postClose" type="button">✕</button>
+  </div>
+  <div class="panel-body">
+    <div class="field">
+      <label>想说点什么</label>
+      <textarea id="postText" maxlength="300" placeholder="记录一下此刻…"></textarea>
+      <div class="tip">发出去的内容存在这台手机里，随时可以删。发完他看到就会来评论你。</div>
+    </div>
+    <button class="btn block" id="postPublish" type="button">发布</button>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="js/store.js"></script>
+<script src="js/shell.js"></script>
+<script src="js/cards.js"></script>
+<script src="js/avatar.js"></script>
+<script src="player.js"></script>
+<script>
+(function () {
+  var m = SITE_CONFIG.moments || {};
+  var chatCfg = SITE_CONFIG.chat || {};
+
+  LN.boot({ title: m.pageTitle || '他的朋友圈' });
+
+  var HIS = m.ownerName || (chatCfg.partnerName || '查理苏');
+  var ME = m.myName || (chatCfg.userName || '姜宁');
+
+  document.getElementById('pageTitle').textContent = m.pageTitle || '他的朋友圈';
+  document.getElementById('mName').textContent = HIS;
+  document.getElementById('cardBtnLabel').textContent = m.cardButton || '字卡库';
+
+  /* 头像：点一下就能换，双方各自一张 */
+  function renderAvatars() {
+    document.getElementById('hisAvatar').innerHTML = LN.avatarHtml('him');
+    document.getElementById('myAvatar').innerHTML = LN.avatarHtml('me');
+  }
+  LN.bindAvatarButton(document.getElementById('hisAvatarBtn'), 'him');
+  LN.bindAvatarButton(document.getElementById('myAvatarBtn'), 'me');
+
+  /* 封面也能换成自己的图 */
+  function renderCover() {
+    var src = LN.getCover();
+    document.getElementById('coverImg').innerHTML = src ? '<img src="' + src + '" alt="">' : '';
+    document.getElementById('coverBird').style.display = src ? 'none' : 'block';
+  }
+  LN.bindImageButton(document.getElementById('coverBtn'), 'cover');
+
+  LN.onAvatarChange(function (k) {
+    renderAvatars();
+    if (k === 'cover') renderCover();
+    renderFeed();
+  });
+  document.getElementById('genBtn').textContent = m.generateButton || '让他发一条';
+  document.getElementById('postBtn').textContent = m.postButton || '我也发一条';
+
+  LN.bindCardButton(document.getElementById('cardBtn'), 'moments');
+
+  var feed = document.getElementById('feed');
+  var replyTo = null;
+  var drafts = {};
+
+  /* ---------------- 数据 ---------------- */
+  function getPosts() {
+    var list = LN.read(LN.KEYS.moments, []);
+    if (!Array.isArray(list)) list = [];
+    return list;
+  }
+  function setPosts(list) { LN.write(LN.KEYS.moments, list.slice(-300)); }
+
+  /* ---------------- 每天 1~3 条的随机时刻表 ---------------- */
+  function scheduleSig(st) {
+    return [st.momentPerDayMin, st.momentPerDayMax, st.momentFromHour, st.momentToHour].join('_');
+  }
+  function genTimes(count, fromH, toH) {
+    var p = LN.bjParts();
+    var startMin = fromH * 60;
+    var endMin = toH * 60;
+    /* 已经过去的时间不再排，避免一打开就一次性刷出好几条 */
+    var nowMin = p.h * 60 + p.mi;
+    if (startMin < nowMin) startMin = nowMin;
+    var out = [];
+    for (var i = 0; i < count; i++) {
+      var mm;
+      if (endMin > startMin) mm = startMin + Math.floor(Math.random() * (endMin - startMin + 1));
+      else mm = nowMin + LN.randInt(1, 25);          // 今天的可发时段已经过去了，就放在稍后一点
+      var h = Math.floor(mm / 60), mi = mm % 60;
+      if (h > 23) { h = 23; mi = 59; }
+      out.push(LN.bjToTs(p.y, p.m, p.d, h, mi) + Math.floor(Math.random() * 60) * 1000);
+    }
+    out.sort(function (a, b) { return a - b; });
+    return out;
+  }
+  function ensureSchedule() {
+    var st = LN.getSettings();
+    var today = LN.bjDateKey();
+    var sig = scheduleSig(st);
+    var s = LN.read(LN.KEYS.momentSchedule, null);
+
+    if (!s || s.date !== today) {
+      var n = LN.randInt(st.momentPerDayMin, st.momentPerDayMax);
+      s = { date: today, sig: sig, items: genTimes(n, st.momentFromHour, st.momentToHour).map(function (t) {
+        return { at: t, fired: false };
+      }) };
+      LN.write(LN.KEYS.momentSchedule, s);
+      return s;
+    }
+    if (s.sig !== sig) {
+      var fired = (s.items || []).filter(function (i) { return i.fired; });
+      var n2 = LN.randInt(st.momentPerDayMin, st.momentPerDayMax);
+      var extra = Math.max(0, n2 - fired.length);
+      s.sig = sig;
+      s.items = fired.concat(genTimes(extra, st.momentFromHour, st.momentToHour).map(function (t) {
+        return { at: t, fired: false };
+      }));
+      s.items.sort(function (a, b) { return a.at - b.at; });
+      LN.write(LN.KEYS.momentSchedule, s);
+    }
+    return s;
+  }
+
+  /* ---------------- 触发 ---------------- */
+  function createPost(ts, author, text) {
+    var list = getPosts();
+    var post = {
+      id: LN.uid(),
+      author: author || 'him',
+      text: text || LN.pickCard('moments', '……'),
+      time: ts || Date.now(),
+      likes: 0, liked: false, likedByHim: false,
+      comments: [], pending: []
+    };
+    list.push(post);
+    setPosts(list);
+    return post;
+  }
+
+  function scheduleReply(postId, cmtId, cmtName) {
+    var st = LN.getSettings();
+    var delay = LN.randInt(st.momentCommentDelayMin, st.momentCommentDelayMax) * 1000;
+    var list = getPosts();
+    list.forEach(function (p) {
+      if (p.id !== postId) return;
+      p.pending = p.pending || [];
+      p.pending.push({ at: Date.now() + delay, cmtId: cmtId || null, cmtName: cmtName || '' });
+    });
+    setPosts(list);
+  }
+
+  function tick() {
+    var s = ensureSchedule();
+    var now = Date.now();
+    var posted = false;
+
+    s.items.forEach(function (it) {
+      if (!it.fired && it.at <= now) { it.fired = true; createPost(it.at); posted = true; }
+    });
+    if (posted) LN.write(LN.KEYS.momentSchedule, s);
+
+    var list = getPosts();
+    var replied = false;
+    var pendingTotal = 0;
+    list.forEach(function (p) {
+      p.pending = p.pending || [];
+      var keep = [];
+      p.pending.forEach(function (task) {
+        if (task.at <= now) {
+          p.comments = p.comments || [];
+          p.comments.push({
+            id: LN.uid(), who: 'him',
+            text: LN.pickCard('moments', '……'),
+            time: Date.now(),
+            replyTo: task.cmtId || null,
+            replyToName: task.cmtName || ''
+          });
+          if (p.author === 'me') { p.likedByHim = true; p.likes = (p.likes || 0) + 1; }
+          replied = true;
+        } else { keep.push(task); pendingTotal++; }
+      });
+      p.pending = keep;
+    });
+    if (replied) setPosts(list);
+
+    if (posted || replied) {
+      renderFeed();
+      if (replied && document.visibilityState === 'visible') LN.toast(HIS + ' 刚刚回复了你～');
+    }
+    return pendingTotal;
+  }
+
+  /* ---------------- 渲染 ---------------- */
+  function avatarHtml(who) {
+    return LN.avatarHtml(who === 'him' ? 'him' : 'me');
+  }
+  function commentHtml(c) {
+    var isMe = c.who === 'me';
+    var name = isMe ? ME : HIS;
+    var re = c.replyToName ? '<span class="cmt-re">回复 ' + LN.esc(c.replyToName) + '</span>' : '';
+    return '<div class="cmt' + (isMe ? ' me' : '') + '" data-cmt="' + LN.esc(c.id) + '">' +
+      '<span class="cmt-av">' + avatarHtml(c.who) + '</span>' +
+      '<div class="cmt-main">' +
+        '<div class="cmt-line"><b>' + LN.esc(name) + '</b>' + re + '：' + LN.esc(c.text) + '</div>' +
+        '<div class="cmt-foot">' +
+          '<span class="cmt-time" data-ts="' + c.time + '">' + LN.timeAgoBJ(c.time) + '</span>' +
+          (isMe ? '<button class="cmt-op del" type="button" data-op="del">删除</button>' : '') +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function renderFeed() {
+    var list = getPosts().slice().sort(function (a, b) { return (a.time || 0) - (b.time || 0); }).reverse();
+    feed.innerHTML = '';
+
+    if (!list.length) {
+      feed.innerHTML = '<div class="moments-empty">' +
+        '<svg class="bird-svg" viewBox="0 0 72 72"><use href="#ln-bird"/></svg>' +
+        '<p>这里还什么都没有。<br>点下面「我也发一条」写点自己的，<br>或者让他发一条～</p></div>';
+      return;
+    }
+
+    list.forEach(function (post) {
+      var mine = post.author === 'me';
+      var el = document.createElement('div');
+      el.className = 'post';
+      el.setAttribute('data-id', post.id);
+
+      var cmts = post.comments || [];
+      var pendingHere = (post.pending || []).length > 0;
+      var cmtHtml = cmts.map(commentHtml).join('') +
+        (pendingHere ? '<div class="cmt"><span class="cmt-av">' + avatarHtml('him') + '</span>' +
+          '<div class="cmt-main"><div class="cmt-line"><b>' + LN.esc(HIS) + '</b>' +
+          '<span class="typing-dots"><i></i><i></i><i></i></span></div></div></div>' : '');
+
+      var actsHtml = mine
+        ? '<button type="button" class="p-del">删除</button>'
+        : '<button type="button" class="like' + (post.liked ? ' on' : '') + '">' +
+            (post.liked ? '♥ 已赞' : '♡ 赞') + (post.likes ? ' ' + post.likes : '') + '</button>';
+
+      var likedTip = (mine && post.likedByHim) ? '<span class="p-liked">♥ ' + LN.esc(HIS) + '</span>' : '';
+
+      el.innerHTML =
+        '<span class="p-avatar' + (mine ? ' me' : '') + '">' + avatarHtml(post.author) + '</span>' +
+        '<div class="p-main">' +
+          '<div class="p-author">' + LN.esc(mine ? ME : HIS) + '</div>' +
+          '<div class="p-text">' + LN.esc(post.text) + '</div>' +
+          '<div class="p-meta">' +
+            '<span class="p-time" data-ts="' + post.time + '">' + LN.timeAgoBJ(post.time) + '</span>' +
+            likedTip +
+            '<span class="p-acts">' + actsHtml + '</span>' +
+          '</div>' +
+          '<div class="p-comments"' + (cmtHtml ? '' : ' style="display:none"') + '>' + cmtHtml + '</div>' +
+          '<div class="p-comment-box">' +
+            '<div class="p-comment-row">' +
+              '<input type="text" maxlength="120" placeholder="' + LN.esc(m.commentPlaceholder || '说点什么…') + '">' +
+              '<button class="btn ghost small" type="button" data-op="send">发送</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+
+      bindPost(el, post, mine);
+      feed.appendChild(el);
+
+      var d = drafts[post.id];
+      if (d) el.querySelector('.p-comment-row input').value = d;
+    });
+  }
+
+  function bindPost(el, post, mine) {
+    var input = el.querySelector('.p-comment-row input');
+    input.addEventListener('input', function () { drafts[post.id] = input.value; });
+
+    function submit() {
+      var val = input.value.trim();
+      if (!val) { input.focus(); return; }
+      drafts[post.id] = '';
+      addComment(post.id, val);
+    }
+    input.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+    el.querySelector('[data-op="send"]').addEventListener('click', submit);
+
+    Array.prototype.forEach.call(el.querySelectorAll('[data-op="del"]'), function (b) {
+      b.addEventListener('click', function () {
+        var cmtEl = b.closest('.cmt');
+        if (cmtEl) removeComment(post.id, cmtEl.getAttribute('data-cmt'));
+      });
+    });
+
+    if (mine) {
+      el.querySelector('.p-del').addEventListener('click', function () { removePost(post.id); });
+    } else {
+      el.querySelector('.like').addEventListener('click', function () { toggleLike(post.id); });
+    }
+  }
+
+  /* ---------------- 操作 ---------------- */
+  function removePost(id) {
+    if (!window.confirm('删掉这条动态？')) return;
+    setPosts(getPosts().filter(function (p) { return p.id !== id; }));
+    delete drafts[id];
+    renderFeed();
+  }
+  function removeComment(postId, cmtId) {
+    if (!window.confirm('删掉这条评论？')) return;
+    var list = getPosts();
+    list.forEach(function (p) {
+      if (p.id !== postId) return;
+      p.comments = (p.comments || []).filter(function (c) { return c.id !== cmtId; });
+    });
+    setPosts(list);
+    renderFeed();
+  }
+  function toggleLike(id) {
+    var list = getPosts();
+    list.forEach(function (p) {
+      if (p.id !== id) return;
+      if (p.liked) { p.liked = false; p.likes = Math.max(0, (p.likes || 1) - 1); }
+      else { p.liked = true; p.likes = (p.likes || 0) + 1; }
+    });
+    setPosts(list);
+    renderFeed();
+  }
+  function addComment(postId, text) {
+    var list = getPosts();
+    var target = null;
+    list.forEach(function (p) {
+      if (p.id !== postId) return;
+      p.comments = p.comments || [];
+      var last = p.comments[p.comments.length - 1];
+      var cmt = {
+        id: LN.uid(), who: 'me', text: text, time: Date.now(),
+        replyTo: (last && last.who === 'him') ? last.id : null,
+        replyToName: (last && last.who === 'him') ? HIS : ''
+      };
+      p.comments.push(cmt);
+      target = p;
+    });
+    setPosts(list);
+    renderFeed();
+    scheduleReply(postId, target.comments[target.comments.length - 1].id, ME);
+    renderFeed();
+  }
+
+  /* ---------------- 发一条 ---------------- */
+  document.getElementById('genBtn').addEventListener('click', function () {
+    createPost(Date.now());
+    renderFeed();
+    LN.toast(HIS + ' 发了一条新动态');
+  });
+
+  var postMask = document.getElementById('postMask');
+  var postDialog = document.getElementById('postDialog');
+  var postText = document.getElementById('postText');
+  function openPost() {
+    postText.value = '';
+    postMask.classList.add('show');
+    postDialog.classList.add('show');
+    setTimeout(function () { postText.focus(); }, 80);
+  }
+  function closePost() {
+    postMask.classList.remove('show');
+    postDialog.classList.remove('show');
+  }
+  document.getElementById('postBtn').addEventListener('click', openPost);
+  document.getElementById('postClose').addEventListener('click', closePost);
+  postMask.addEventListener('click', closePost);
+
+  document.getElementById('postPublish').addEventListener('click', function () {
+    var text = postText.value.trim();
+    if (!text) { postText.focus(); return; }
+    var post = createPost(Date.now(), 'me', text);
+    closePost();
+    renderFeed();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scheduleReply(post.id, null, ME);
+    renderFeed();
+  });
+
+  /* ---------------- 北京时间钟 + 定时刷新 ---------------- */
+  function renderClock() {
+    var p = LN.bjParts();
+    document.getElementById('bjClock').textContent =
+      '北京时间 ' + LN.pad(p.h) + ':' + LN.pad(p.mi) + ' · ' + LN.fmtBJDate();
+  }
+  renderClock();
+
+  setInterval(function () {
+    LN.$$ && LN.$$('[data-ts]').forEach(function (el) {
+      var ts = Number(el.getAttribute('data-ts'));
+      if (ts) el.textContent = LN.timeAgoBJ(ts);
+    });
+    renderClock();
+  }, 30000);
+
+  setInterval(tick, 8000);
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') tick();
+  });
+
+  renderAvatars();
+  renderCover();
+  ensureSchedule();
+  tick();
+  renderFeed();
+})();
+</script>
+</body>
+</html>

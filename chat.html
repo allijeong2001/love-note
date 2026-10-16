@@ -10,16 +10,14 @@
 
 <div class="chat-app" id="chatApp">
 
-  <!-- 顶部：返回 + 对方昵称 -->
   <header class="chat-header">
     <a class="back-btn" href="index.html" aria-label="返回主页">←</a>
     <span class="chat-title" id="chatTitle"></span>
+    <button class="chip-btn" id="cardBtn" type="button">🃏 <span id="cardBtnLabel">字卡库</span></button>
   </header>
 
-  <!-- 聊天记录（仅当前会话有效，刷新即清空） -->
   <main class="chat-messages" id="messages"></main>
 
-  <!-- 底部输入栏 -->
   <footer class="chat-input-bar">
     <input type="text" id="chatInput" autocomplete="off" maxlength="500">
     <button id="sendBtn"></button>
@@ -27,56 +25,97 @@
 </div>
 
 <script src="config.js"></script>
+<script src="js/store.js"></script>
+<script src="js/shell.js"></script>
+<script src="player.js"></script>
+<script src="js/cards.js"></script>
 <script>
 (function () {
   var g = SITE_CONFIG.global;
   var c = SITE_CONFIG.chat;
 
-  /* 应用全局配色与气泡颜色 */
-  var root = document.documentElement;
-  root.style.setProperty('--grad-from', g.gradientFrom);
-  root.style.setProperty('--grad-to', g.gradientTo);
-  root.style.setProperty('--text-color', g.textColor);
-  root.style.setProperty('--partner-bubble', c.partnerBubbleColor);
-  root.style.setProperty('--partner-bubble-text', c.partnerBubbleTextColor);
-  root.style.setProperty('--user-bubble', c.userBubbleColor);
-  root.style.setProperty('--user-bubble-text', c.userBubbleTextColor);
-  document.title = g.siteTitle + ' · ' + c.pageTitle;
-
-  /* 顶部与输入栏文案 */
+  LN.boot({ title: c.pageTitle, deco: false });
   document.getElementById('chatTitle').textContent = c.partnerName;
+  document.getElementById('cardBtnLabel').textContent = c.cardButton || '字卡库';
+
   var input = document.getElementById('chatInput');
   input.placeholder = c.inputPlaceholder;
-  document.getElementById('sendBtn').textContent = c.sendButtonText;
+  var sendBtn = document.getElementById('sendBtn');
+  sendBtn.textContent = c.sendButtonText;
+
+  LN.bindCardButton(document.getElementById('cardBtn'), 'chat');
 
   var msgBox = document.getElementById('messages');
-  var sendBtn = document.getElementById('sendBtn');
-  var waiting = false; // 是否正在等待对方回复
+  var waiting = false;
 
-  /* ---------- 消息渲染 ---------- */
-  function addMessage(who, text) {
-    var msg = document.createElement('div');
-    msg.className = 'msg ' + who;
+  /* ---------- 本地聊天记录 ---------- */
+  function loadLog() {
+    var log = LN.read(LN.KEYS.chatLog, []);
+    return Array.isArray(log) ? log : [];
+  }
+  function saveLog(log) { LN.write(LN.KEYS.chatLog, log.slice(-400)); }
 
-    var avatar = document.createElement('div');
-    avatar.className = 'avatar';
-    if (who === 'partner') {
-      avatar.style.background = c.partnerAvatarColor;
-      avatar.textContent = c.partnerAvatarText;
-    } else {
-      avatar.style.background = c.userAvatarColor;
-      avatar.textContent = c.userAvatarText;
+  function avatarHtml(who) {
+    /* 换过头像就用照片，没换过：他是小鸟，我是名字首字 */
+    if (who === 'partner') return LN.avatarHtml('him');
+    var mine = LN.avatarHtml('me');
+    return mine.indexOf('<img') === 0 ? mine : LN.esc(c.userAvatarText || '我');
+  }
+
+  function scrollToBottom() {
+    requestAnimationFrame(function () { msgBox.scrollTop = msgBox.scrollHeight; });
+  }
+
+  function appendDay(ts) {
+    var el = document.createElement('div');
+    el.className = 'chat-day';
+    el.textContent = LN.fmtBJDate(ts);
+    msgBox.appendChild(el);
+  }
+
+  function renderMsg(m) {
+    var el = document.createElement('div');
+    el.className = 'msg ' + m.who;
+    el.innerHTML =
+      '<div class="avatar" style="background:' +
+        (m.who === 'partner' ? (c.partnerAvatarColor || '#c9a3ff') : (c.userAvatarColor || '#ffa8cd')) +
+      '">' + avatarHtml(m.who) + '</div>' +
+      '<div class="bubble"></div>';
+    el.querySelector('.bubble').textContent = m.text;
+    msgBox.appendChild(el);
+  }
+
+  function renderAll() {
+    msgBox.innerHTML = '';
+    var log = loadLog();
+    var lastDay = '';
+    log.forEach(function (m) {
+      var day = LN.bjDateKey(m.time || Date.now());
+      if (day !== lastDay) { appendDay(m.time || Date.now()); lastDay = day; }
+      renderMsg(m);
+    });
+    if (!log.length) {
+      var tip = document.createElement('div');
+      tip.className = 'moments-empty';
+      tip.innerHTML = '<svg class="bird-svg" viewBox="0 0 72 72" style="margin:0 auto 8px"><use href="#ln-bird"/></svg>' +
+        '<p>还没有聊天记录。<br>说点什么吧，他会从字卡库里挑一张回你～</p>';
+      msgBox.appendChild(tip);
     }
-
-    var bubble = document.createElement('div');
-    bubble.className = 'bubble';
-    bubble.textContent = text; // textContent 防注入
-
-    msg.appendChild(avatar);
-    msg.appendChild(bubble);
-    msgBox.appendChild(msg);
     scrollToBottom();
-    return msg;
+  }
+
+  function push(who, text) {
+    var log = loadLog();
+    var m = { who: who, text: text, time: Date.now() };
+    var first = !log.length;
+    log.push(m);
+    saveLog(log);
+    if (first || !msgBox.querySelector('.msg')) msgBox.innerHTML = '';
+    var last = log[log.length - 2];
+    if (!last || LN.bjDateKey(last.time) !== LN.bjDateKey(m.time)) appendDay(m.time);
+    renderMsg(m);
+    scrollToBottom();
+    return m;
   }
 
   function addTyping() {
@@ -84,40 +123,14 @@
     msg.className = 'msg partner';
     msg.id = 'typingMsg';
     msg.innerHTML =
-      '<div class="avatar" style="background:' + c.partnerAvatarColor + '">' + escapeHtml(c.partnerAvatarText) + '</div>' +
+      '<div class="avatar" style="background:' + (c.partnerAvatarColor || '#c9a3ff') + '">' + avatarHtml('partner') + '</div>' +
       '<div class="bubble"><span class="typing-dots"><i></i><i></i><i></i></span></div>';
     msgBox.appendChild(msg);
     scrollToBottom();
   }
-
   function removeTyping() {
     var t = document.getElementById('typingMsg');
     if (t && t.parentNode) t.parentNode.removeChild(t);
-  }
-
-  function scrollToBottom() {
-    requestAnimationFrame(function () {
-      msgBox.scrollTop = msgBox.scrollHeight;
-    });
-  }
-
-  /* ---------- 回复抽取逻辑 ---------- */
-  function pickReply(userText) {
-    var lower = String(userText).toLowerCase();
-    // 关键词规则优先：输入包含任一关键词 -> 从对应回复中随机抽取
-    for (var i = 0; i < (c.keywordRules || []).length; i++) {
-      var rule = c.keywordRules[i];
-      var hit = (rule.keywords || []).some(function (kw) {
-        return kw && lower.indexOf(String(kw).toLowerCase()) !== -1;
-      });
-      if (hit && rule.replies && rule.replies.length) {
-        return rule.replies[Math.floor(Math.random() * rule.replies.length)];
-      }
-    }
-    // 未命中关键词 -> 从 99 条随机回复中抽取
-    var list = c.randomReplies || [];
-    if (!list.length) return '……';
-    return list[Math.floor(Math.random() * list.length)];
   }
 
   /* ---------- 发送 ---------- */
@@ -125,35 +138,27 @@
     var text = input.value.trim();
     if (!text || waiting) return;
     input.value = '';
-    addMessage('user', text);
+    push('user', text);
     waiting = true;
     sendBtn.disabled = true;
-    sendBtn.style.opacity = '.6';
 
-    var delay = Number(c.replyDelayMs) || 1000;
-    setTimeout(function () {
-      addTyping();
-    }, Math.max(0, delay - 700));
+    var st = LN.getSettings();
+    var delay = Number(st.chatReplyDelayMs) || 1000;
 
+    setTimeout(function () { addTyping(); }, Math.max(0, delay - 700));
     setTimeout(function () {
       removeTyping();
-      addMessage('partner', pickReply(text));
+      var reply = LN.pickCard('chat', '（他好像还没学会这句话）');
+      push('partner', reply);
       waiting = false;
       sendBtn.disabled = false;
-      sendBtn.style.opacity = '1';
     }, delay);
   }
 
   sendBtn.addEventListener('click', send);
-  input.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') send();
-  });
+  input.addEventListener('keydown', function (e) { if (e.key === 'Enter') send(); });
 
-  function escapeHtml(str) {
-    return String(str == null ? '' : str)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
+  renderAll();
 })();
 </script>
 </body>

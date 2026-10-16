@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>写信给他</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="float-deco" id="floatDeco"></div>
+
+<div class="page">
+  <header class="topbar">
+    <a class="back-btn" href="index.html" aria-label="返回主页">←</a>
+    <span class="topbar-title" id="pageTitle"></span>
+    <span class="spacer"></span>
+    <button class="chip-btn" id="cardBtn" type="button">🃏 <span id="cardBtnLabel">字卡库</span></button>
+  </header>
+
+  <div class="letter-wrap">
+
+    <div class="letter-tabs">
+      <button class="btn small" id="tabWrite" type="button">写信</button>
+      <button class="btn ghost small" id="tabBox" type="button">信匣<span id="unreadDot"></span></button>
+    </div>
+
+    <!-- ===== 写信 ===== -->
+    <div id="composeView" style="width:100%;display:flex;flex-direction:column;align-items:center">
+      <div class="letter-paper" id="writeSheet">
+        <div class="letter-head">
+          <svg class="bird-svg sm" viewBox="0 0 72 72" style="width:26px;height:26px"><use href="#ln-bird"/></svg>
+          <span class="lh-title" id="letterTitle"></span>
+          <span class="lh-time" id="letterDate"></span>
+        </div>
+        <textarea class="letter-body" id="letterBody" spellcheck="false"></textarea>
+        <div class="letter-sign" id="letterSign"></div>
+      </div>
+
+      <div class="letter-actions">
+        <button class="btn" id="sendLetterBtn" type="button"></button>
+        <button class="btn ghost" id="clearLetterBtn" type="button">清空</button>
+      </div>
+      <p class="letter-reply-hint" id="replyHint"></p>
+    </div>
+
+    <!-- ===== 信匣 ===== -->
+    <div id="boxView" class="hidden" style="width:100%">
+      <p class="letter-reply-hint" id="boxHint"></p>
+      <div class="letter-list" id="letterList"></div>
+    </div>
+
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="js/store.js"></script>
+<script src="js/shell.js"></script>
+<script src="player.js"></script>
+<script src="js/cards.js"></script>
+<script>
+(function () {
+  var cfg = SITE_CONFIG.letter || {};
+  var chatCfg = SITE_CONFIG.chat || {};
+
+  LN.boot({ title: cfg.pageTitle || '写信给他' });
+
+  var HIS = chatCfg.partnerName || '查理苏';
+  var ME = chatCfg.userName || '姜宁';
+
+  document.getElementById('pageTitle').textContent = cfg.pageTitle || '写信给他';
+  document.getElementById('letterTitle').textContent = cfg.title || '见字如面';
+  document.getElementById('letterSign').textContent = cfg.sign || ('—— ' + ME);
+  document.getElementById('cardBtnLabel').textContent = cfg.cardButton || '字卡库';
+  var bodyEl = document.getElementById('letterBody');
+  bodyEl.placeholder = cfg.placeholder || '写下你想对他说的话…';
+  var sendBtn = document.getElementById('sendLetterBtn');
+  sendBtn.textContent = cfg.sendButton || '寄出这封信';
+
+  LN.bindCardButton(document.getElementById('cardBtn'), 'letter');
+
+  var replyHint = document.getElementById('replyHint');
+  var boxHint = document.getElementById('boxHint');
+  var letterList = document.getElementById('letterList');
+  var unreadDot = document.getElementById('unreadDot');
+  var composeView = document.getElementById('composeView');
+  var boxView = document.getElementById('boxView');
+
+  /* ---------------- 数据 ---------------- */
+  function getLetters() {
+    var l = LN.read(LN.KEYS.letters, []);
+    return Array.isArray(l) ? l : [];
+  }
+  function setLetters(list) { LN.write(LN.KEYS.letters, (list || []).slice(-200)); }
+  function getPending() {
+    var p = LN.read(LN.KEYS.letterPending, []);
+    return Array.isArray(p) ? p : [];
+  }
+  function setPending(p) { LN.write(LN.KEYS.letterPending, p || []); }
+
+  function todayStr() { return LN.fmtBJDate(); }
+  document.getElementById('letterDate').textContent = todayStr();
+
+  /* ---------------- 视图切换 ---------------- */
+  function switchView(which) {
+    var isWrite = which === 'write';
+    composeView.classList.toggle('hidden', !isWrite);
+    boxView.classList.toggle('hidden', isWrite);
+    document.getElementById('tabWrite').className = isWrite ? 'btn small' : 'btn ghost small';
+    document.getElementById('tabBox').className = isWrite ? 'btn ghost small' : 'btn small';
+    if (!isWrite) { markSeen(); renderLetters(); }
+  }
+  document.getElementById('tabWrite').addEventListener('click', function () { switchView('write'); });
+  document.getElementById('tabBox').addEventListener('click', function () { switchView('box'); });
+
+  /* ---------------- 未读 ---------------- */
+  function unseenCount() {
+    var seen = LN.read(LN.KEYS.letterSeen, 0) || 0;
+    return getLetters().filter(function (l) { return l.from === 'him' && (l.time || 0) > seen; }).length;
+  }
+  function renderUnread() {
+    var n = unseenCount();
+    unreadDot.innerHTML = n ? '<span class="unread-dot"></span>' : '';
+  }
+  function markSeen() {
+    LN.write(LN.KEYS.letterSeen, Date.now());
+    renderUnread();
+  }
+
+  /* ---------------- 每天 0~1 封主动来信 ---------------- */
+  function ensureLetterSchedule() {
+    var st = LN.getSettings();
+    var today = LN.bjDateKey();
+    var s = LN.read(LN.KEYS.letterSchedule, null);
+    if (s && s.date === today) return s;
+
+    var at = null;
+    var will = st.letterActiveEnabled && (Math.random() * 100 < st.letterActiveChance);
+    if (will) {
+      var p = LN.bjParts();
+      var startMin = Math.max(st.letterActiveFromHour * 60, p.h * 60 + p.mi);
+      var endMin = st.letterActiveToHour * 60;
+      var mm = (endMin > startMin)
+        ? startMin + Math.floor(Math.random() * (endMin - startMin + 1))
+        : p.h * 60 + p.mi + LN.randInt(5, 40);
+      var h = Math.floor(mm / 60), mi = mm % 60;
+      if (h > 23) { h = 23; mi = 59; }
+      at = LN.bjToTs(p.y, p.m, p.d, h, mi) + Math.floor(Math.random() * 60) * 1000;
+    }
+    s = { date: today, at: at, fired: false };
+    LN.write(LN.KEYS.letterSchedule, s);
+    return s;
+  }
+
+  /* ---------------- 触发 ---------------- */
+  function tick() {
+    var now = Date.now();
+    var got = false;
+    var letters = getLetters();
+
+    /* 他主动写来的信 */
+    var s = ensureLetterSchedule();
+    if (s && s.at && !s.fired && s.at <= now) {
+      s.fired = true;
+      LN.write(LN.KEYS.letterSchedule, s);
+      letters.push({
+        id: LN.uid(), from: 'him',
+        text: LN.pickCard('letter', '……'),
+        time: s.at, replyTo: null
+      });
+      got = true;
+    }
+
+    /* 回信 */
+    var pend = getPending();
+    if (pend.length) {
+      var keep = [];
+      pend.forEach(function (task) {
+        if (task.at <= now) {
+          letters.push({
+            id: LN.uid(), from: 'him',
+            text: LN.pickCard('letter', '……'),
+            time: Date.now(), replyTo: task.letterId || null
+          });
+          got = true;
+        } else keep.push(task);
+      });
+      setPending(keep);
+    }
+
+    if (got) setLetters(letters);
+
+    if (got) {
+      renderUnread();
+      if (!boxView.classList.contains('hidden')) renderLetters();
+      renderHint();
+      if (document.visibilityState === 'visible') LN.toast('你收到了 ' + HIS + ' 的一封信');
+    }
+    renderHint();
+  }
+
+  /* ---------------- 提示 ---------------- */
+  function renderHint() {
+    var pend = getPending();
+    if (pend.length) {
+      var soon = Math.min.apply(null, pend.map(function (t) { return t.at; }));
+      var left = Math.max(0, Math.ceil((soon - Date.now()) / 60000));
+      replyHint.textContent = '信已寄出，' + HIS + ' 大概还要 ' + left + ' 分钟才会回信。';
+    } else {
+      replyHint.textContent = cfg.waitHint || '';
+    }
+    var all = getLetters();
+    var mine = all.filter(function (l) { return l.from === 'me'; }).length;
+    var his = all.filter(function (l) { return l.from === 'him'; }).length;
+    boxHint.textContent = '你寄出 ' + mine + ' 封，他回了 ' + his + ' 封 · 时间均为北京时间';
+  }
+
+  /* ---------------- 寄信 ---------------- */
+  function shake(el) {
+    el.style.animation = 'none';
+    void el.offsetWidth;
+    el.style.animation = 'shakeX .4s ease';
+    setTimeout(function () { el.style.animation = ''; }, 450);
+    if (!document.getElementById('shakeStyle')) {
+      var s = document.createElement('style');
+      s.id = 'shakeStyle';
+      s.textContent = '@keyframes shakeX{0%,100%{transform:translateX(0)}25%{transform:translateX(-7px)}50%{transform:translateX(7px)}75%{transform:translateX(-4px)}}';
+      document.head.appendChild(s);
+    }
+  }
+
+  sendBtn.addEventListener('click', function () {
+    var text = (bodyEl.value || '').trim();
+    if (!text) {
+      shake(document.getElementById('writeSheet'));
+      replyHint.textContent = '还没写内容呢，先写点什么吧～';
+      bodyEl.focus();
+      return;
+    }
+    var st = LN.getSettings();
+    var delayMin = LN.randInt(st.letterReplyMinMin, st.letterReplyMaxMin);
+
+    var letters = getLetters();
+    var mine = { id: LN.uid(), from: 'me', text: text, time: Date.now(), replyTo: null };
+    letters.push(mine);
+    setLetters(letters);
+
+    var pend = getPending();
+    pend.push({ id: LN.uid(), at: Date.now() + delayMin * 60000, letterId: mine.id });
+    setPending(pend);
+
+    bodyEl.value = '';
+    document.getElementById('letterDate').textContent = todayStr();
+    renderHint();
+    switchView('box');
+    LN.toast('寄出去了，等他的回音～');
+  });
+
+  document.getElementById('clearLetterBtn').addEventListener('click', function () {
+    bodyEl.value = '';
+    bodyEl.focus();
+  });
+
+  /* ---------------- 信匣 ---------------- */
+  function renderLetters() {
+    var letters = getLetters().slice().sort(function (a, b) { return (a.time || 0) - (b.time || 0); });
+    var seen = LN.read(LN.KEYS.letterSeen, 0) || 0;
+    letterList.innerHTML = '';
+
+    if (!letters.length) {
+      letterList.innerHTML =
+        '<div class="letter-paper"><div class="letter-body" style="text-align:center;font-size:16px">' +
+        '信匣还是空的，去写第一封信吧。</div></div>';
+      return;
+    }
+
+    var byId = {};
+    letters.forEach(function (l) { byId[l.id] = l; });
+
+    letters.forEach(function (l) {
+      var isMe = l.from === 'me';
+      var isNew = !isMe && (l.time || 0) > seen;
+      var quoted = (!isMe && l.replyTo && byId[l.replyTo]) ? byId[l.replyTo].text : '';
+      var sheet = document.createElement('div');
+      sheet.className = 'letter-paper' + (isNew ? ' new' : '');
+      sheet.innerHTML =
+        '<div class="letter-head">' +
+          '<span class="letter-from ' + (isMe ? '' : 'him') + '">' + LN.esc(isMe ? '我寄出的' : '他写来的') + '</span>' +
+          '<span class="lh-title">' + LN.esc(isMe ? ('致 ' + HIS) : (HIS + ' 的信')) + '</span>' +
+          '<span class="lh-time">' + LN.esc(LN.fmtBJFull(l.time)) + '</span>' +
+        '</div>' +
+        (quoted ? '<div class="letter-quote">「' + LN.esc(quoted.slice(0, 80)) + (quoted.length > 80 ? '…' : '') + '」</div>' : '') +
+        '<div class="letter-body">' + LN.esc(l.text) + '</div>' +
+        '<div class="letter-sign">' + LN.esc(isMe ? (cfg.sign || ('—— ' + ME)) : (cfg.hisSign || ('—— ' + HIS))) + '</div>';
+      letterList.appendChild(sheet);
+    });
+  }
+
+  /* ---------------- 初始化 ---------------- */
+  renderUnread();
+  renderHint();
+  switchView('write');
+  ensureLetterSchedule();
+  tick();
+
+  setInterval(tick, 10000);
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') { tick(); document.getElementById('letterDate').textContent = todayStr(); }
+  });
+})();
+</script>
+</body>
+</html>

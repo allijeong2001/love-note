@@ -19,78 +19,109 @@
 
   <div class="timer-stage">
 
-    <!-- 圆形进度环 -->
     <div class="timer-ring-wrap">
-      <svg width="250" height="250" viewBox="0 0 250 250">
-        <circle class="timer-ring-bg" cx="125" cy="125" r="108"></circle>
-        <circle class="timer-ring-fg" id="ringFg" cx="125" cy="125" r="108"></circle>
+      <svg width="244" height="244" viewBox="0 0 244 244">
+        <defs>
+          <linearGradient id="timerGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#c9a3ff"/>
+            <stop offset="1" stop-color="#ffa8cd"/>
+          </linearGradient>
+        </defs>
+        <circle class="timer-ring-bg" cx="122" cy="122" r="108"></circle>
+        <circle class="timer-ring-fg" id="ringFg" cx="122" cy="122" r="108"></circle>
       </svg>
       <div class="timer-center">
-        <div class="timer-emoji" id="timerEmoji">📚</div>
+        <div class="timer-bird" id="timerBird"></div>
         <div class="timer-phase" id="timerPhase"></div>
         <div class="timer-time" id="timerTime">25:00</div>
       </div>
     </div>
 
-    <!-- 控制按钮 -->
     <div class="timer-controls">
       <button class="timer-btn primary" id="startBtn"></button>
       <button class="timer-btn plain" id="resetBtn"></button>
     </div>
 
-    <!-- 鼓励语气泡（专注期随机出现一次，持续显示几分钟后消失） -->
+    <!-- 手动设定时长 -->
+    <div class="timer-set">
+      <div class="timer-set-title">设定时长</div>
+      <div class="preset-row" id="presetRow"></div>
+      <div class="set-field">
+        <label>专注时长（分钟）</label>
+        <div class="stepper">
+          <button class="st-btn" id="focusMinus" type="button">−</button>
+          <input type="number" id="focusInput" min="1" max="300" step="1">
+          <button class="st-btn" id="focusPlus" type="button">+</button>
+          <span class="st-label">分钟</span>
+        </div>
+      </div>
+      <div class="set-field" style="margin-bottom:0">
+        <label>休息时长（分钟）</label>
+        <div class="stepper">
+          <button class="st-btn" id="breakMinus" type="button">−</button>
+          <input type="number" id="breakInput" min="1" max="120" step="1">
+          <button class="st-btn" id="breakPlus" type="button">+</button>
+          <span class="st-label">分钟</span>
+        </div>
+      </div>
+      <div class="tip" id="applyTip"></div>
+    </div>
+
     <div class="encourage-bubble hide" id="encourageBubble">
-      <span class="encourage-heart">💗</span><span id="encourageText"></span>
+      <span id="encourageText"></span>
     </div>
   </div>
 </div>
 
 <script src="config.js"></script>
+<script src="js/store.js"></script>
+<script src="js/shell.js"></script>
+<script src="player.js"></script>
 <script>
 (function () {
   var g = SITE_CONFIG.global;
   var t = SITE_CONFIG.timer;
 
-  /* 应用全局配色 */
-  var root = document.documentElement;
-  root.style.setProperty('--grad-from', g.gradientFrom);
-  root.style.setProperty('--grad-to', g.gradientTo);
-  root.style.setProperty('--text-color', g.textColor);
-  document.title = g.siteTitle + ' · ' + t.pageTitle;
+  LN.boot({ title: t.pageTitle });
+  document.getElementById('timerBird').innerHTML = LN.birdSvg('sm');
 
   document.getElementById('pageTitle').textContent = t.pageTitle;
-  document.getElementById('startBtn').textContent = t.startButtonText;
-  document.getElementById('resetBtn').textContent = t.resetButtonText;
-  document.getElementById('timerPhase').textContent = t.focusText;
-
-  var FOCUS_SEC = (Number(t.focusMinutes) || 25) * 60;
-  var BREAK_SEC = (Number(t.breakMinutes) || 5) * 60;
+  var startBtn = document.getElementById('startBtn');
+  var resetBtn = document.getElementById('resetBtn');
+  startBtn.textContent = t.startButtonText;
+  resetBtn.textContent = t.resetButtonText;
 
   var PHASE = { IDLE: 'idle', FOCUS: 'focus', BREAK: 'break' };
+  var PRESETS = [15, 25, 45, 60, 90];
+
+  var st = LN.getSettings();
+  var focusMin = clamp(Number(st.focusMinutes) || 25, 1, 300);
+  var breakMin = clamp(Number(st.breakMinutes) || 5, 1, 120);
 
   var phase = PHASE.IDLE;
   var running = false;
-  var remain = FOCUS_SEC;
-  var elapsed = 0;                 // 当前周期已经过的秒数（暂停时不增长）
-  var encourageTarget = -1;        // 鼓励语出现的时间点（秒）
-  var encourageShown = false;
-  var encourageHideAt = -1;        // 鼓励语消失的时间点（秒）
+  var remain = focusMin * 60;
+  var elapsed = 0;
+  var encourageTarget = -1, encourageShown = false, encourageHideAt = -1;
+  var tick = null;
 
   var ring = document.getElementById('ringFg');
-  var R = 108;
-  var CIRC = 2 * Math.PI * R;
+  var R = 108, CIRC = 2 * Math.PI * R;
   ring.style.strokeDasharray = CIRC;
   ring.style.strokeDashoffset = 0;
 
   var timeEl = document.getElementById('timerTime');
   var phaseEl = document.getElementById('timerPhase');
-  var emojiEl = document.getElementById('timerEmoji');
-  var startBtn = document.getElementById('startBtn');
-  var resetBtn = document.getElementById('resetBtn');
   var bubble = document.getElementById('encourageBubble');
   var bubbleText = document.getElementById('encourageText');
+  var focusInput = document.getElementById('focusInput');
+  var breakInput = document.getElementById('breakInput');
+  var applyTip = document.getElementById('applyTip');
 
-  var tick = null;
+  function clamp(v, a, b) { v = Math.round(Number(v) || 0); return Math.max(a, Math.min(b, v)); }
+
+  function focusSec() { return focusMin * 60; }
+  function breakSec() { return breakMin * 60; }
 
   /* ---------- 渲染 ---------- */
   function fmt(sec) {
@@ -98,108 +129,121 @@
     var m = Math.floor(sec / 60), s = sec % 60;
     return (m < 10 ? '0' + m : m) + ':' + (s < 10 ? '0' + s : s);
   }
-
   function render() {
     timeEl.textContent = fmt(remain);
-    var total = (phase === PHASE.BREAK) ? BREAK_SEC : FOCUS_SEC;
+    var total = (phase === PHASE.BREAK) ? breakSec() : focusSec();
     var progress = total ? (total - remain) / total : 0;
     ring.style.strokeDashoffset = CIRC * (1 - progress);
   }
-
   function setPhase(p) {
     phase = p;
-    if (p === PHASE.FOCUS) {
-      remain = FOCUS_SEC;
-      emojiEl.textContent = '📚';
-      phaseEl.textContent = t.focusText;
-    } else if (p === PHASE.BREAK) {
-      remain = BREAK_SEC;
-      emojiEl.textContent = '🍵';
+    if (p === PHASE.BREAK) {
+      remain = breakSec();
       phaseEl.textContent = t.breakText;
     } else {
-      remain = FOCUS_SEC;
-      emojiEl.textContent = '📚';
+      remain = focusSec();
       phaseEl.textContent = t.focusText;
     }
     render();
   }
 
-  /* ---------- 鼓励语逻辑 ----------
-   * 每个专注周期内随机出现一条：
-   * 出现时间点 = 专注开始后 [encourageShowAfterMin, encourageShowBeforeMin] 分钟内的随机秒数
-   * 弹出后持续 encourageDurationMin 分钟再消失
-   * 暂停时计时停止，鼓励语的显示与消失也随之顺延
-   */
+  /* ---------- 时长设定 ---------- */
+  function renderPresets() {
+    var row = document.getElementById('presetRow');
+    row.innerHTML = '';
+    PRESETS.forEach(function (v) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'preset' + (v === focusMin ? ' on' : '');
+      b.textContent = v + ' 分钟';
+      b.addEventListener('click', function () { setFocus(v); });
+      row.appendChild(b);
+    });
+  }
+  function syncInputs() {
+    focusInput.value = focusMin;
+    breakInput.value = breakMin;
+    renderPresets();
+  }
+  function setFocus(v) {
+    focusMin = clamp(v, 1, 300);
+    LN.setSettings({ focusMinutes: focusMin });
+    syncInputs();
+    if (phase === PHASE.IDLE || phase === PHASE.FOCUS && !running) {
+      if (phase === PHASE.IDLE) { setPhase(PHASE.IDLE); }
+    }
+    applyTip.textContent = (phase === PHASE.IDLE)
+      ? '已生效，点「开始」就用新的时长啦。'
+      : '下一轮生效（本轮进行中，不会被打断）。';
+  }
+  function setBreak(v) {
+    breakMin = clamp(v, 1, 120);
+    LN.setSettings({ breakMinutes: breakMin });
+    syncInputs();
+    applyTip.textContent = '休息时长已保存。';
+  }
+  focusInput.addEventListener('change', function () { setFocus(focusInput.value); });
+  breakInput.addEventListener('change', function () { setBreak(breakInput.value); });
+  document.getElementById('focusMinus').addEventListener('click', function () { setFocus(focusMin - 5); });
+  document.getElementById('focusPlus').addEventListener('click', function () { setFocus(focusMin + 5); });
+  document.getElementById('breakMinus').addEventListener('click', function () { setBreak(breakMin - 1); });
+  document.getElementById('breakPlus').addEventListener('click', function () { setBreak(breakMin + 1); });
+
+  /* ---------- 鼓励语 ---------- */
   function scheduleEncourage() {
     var after = (Number(t.encourageShowAfterMin) || 5) * 60;
     var before = (Number(t.encourageShowBeforeMin) || 15) * 60;
     var dur = (Number(t.encourageDurationMin) || 5) * 60;
+    var total = focusSec();
+    if (before > total - 60) before = Math.max(after, total - 60);
     if (before < after) before = after;
-    var maxTarget = Math.min(before, FOCUS_SEC - 60); // 至少留 1 分钟展示时间
-    if (maxTarget < after) maxTarget = after;
-    encourageTarget = after + Math.floor(Math.random() * (maxTarget - after + 1));
+    encourageTarget = after + Math.floor(Math.random() * (before - after + 1));
     encourageHideAt = encourageTarget + dur;
     encourageShown = false;
     hideBubble();
   }
-
   function showBubble() {
     var list = t.encouragementList || [];
     if (!list.length) return;
     bubbleText.textContent = list[Math.floor(Math.random() * list.length)];
     bubble.classList.remove('hide');
   }
-
-  function hideBubble() {
-    bubble.classList.add('hide');
-  }
+  function hideBubble() { bubble.classList.add('hide'); }
 
   /* ---------- 计时 ---------- */
   function startTicking() {
     stopTicking();
     tick = setInterval(function () {
       if (!running) return;
-      elapsed++;
-      remain--;
+      elapsed++; remain--;
 
-      /* 鼓励语触发与消失（仅在专注阶段） */
       if (phase === PHASE.FOCUS) {
-        if (!encourageShown && elapsed >= encourageTarget) {
-          encourageShown = true;
-          showBubble();
-        }
-        if (encourageShown && elapsed >= encourageHideAt) {
-          hideBubble();
-        }
+        if (!encourageShown && elapsed >= encourageTarget) { encourageShown = true; showBubble(); }
+        if (encourageShown && elapsed >= encourageHideAt) hideBubble();
       }
 
       if (remain <= 0) {
         if (phase === PHASE.FOCUS) {
-          /* 专注结束 -> 进入休息 */
           setPhase(PHASE.BREAK);
           elapsed = 0;
           hideBubble();
+          LN.toast('专注结束，休息一下吧～');
         } else {
-          /* 休息结束 -> 回到待开始状态 */
           running = false;
           stopTicking();
           setPhase(PHASE.IDLE);
           startBtn.textContent = t.startButtonText;
+          LN.toast('休息结束，再来一轮？');
         }
         return;
       }
       render();
     }, 1000);
   }
+  function stopTicking() { if (tick) { clearInterval(tick); tick = null; } }
 
-  function stopTicking() {
-    if (tick) { clearInterval(tick); tick = null; }
-  }
-
-  /* ---------- 按钮 ---------- */
   startBtn.addEventListener('click', function () {
     if (phase === PHASE.IDLE) {
-      /* 开始专注 */
       setPhase(PHASE.FOCUS);
       elapsed = 0;
       scheduleEncourage();
@@ -207,11 +251,9 @@
       startBtn.textContent = t.pauseButtonText;
       startTicking();
     } else if (running) {
-      /* 暂停 */
       running = false;
       startBtn.textContent = t.startButtonText;
     } else {
-      /* 继续 */
       running = true;
       startBtn.textContent = t.pauseButtonText;
     }
@@ -225,21 +267,8 @@
     startBtn.textContent = t.startButtonText;
   });
 
-  /* 初始渲染 */
+  syncInputs();
   setPhase(PHASE.IDLE);
-
-  /* 漂浮装饰 */
-  var deco = document.getElementById('floatDeco');
-  var symbols = ['🔪', '💗', '✨', '📖'];
-  for (var i = 0; i < 10; i++) {
-    var s = document.createElement('span');
-    s.textContent = symbols[i % symbols.length];
-    s.style.left = (Math.random() * 100) + '%';
-    s.style.fontSize = (12 + Math.random() * 14) + 'px';
-    s.style.animationDuration = (10 + Math.random() * 14) + 's';
-    s.style.animationDelay = (-Math.random() * 16) + 's';
-    deco.appendChild(s);
-  }
 })();
 </script>
 </body>

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Love Note</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- 漂浮装饰：小鸟与星光 -->
+<div class="float-deco" id="floatDeco"></div>
+
+<a class="home-gear" href="settings.html" aria-label="设置">⚙️</a>
+
+<div class="page">
+
+  <div class="home-head">
+    <div class="home-bird" id="homeBird"></div>
+    <div class="home-names" id="homeNames"></div>
+    <div><span class="home-lovenote" id="homeLoveNote"></span></div>
+    <div class="home-slogan" id="homeSlogan"></div>
+  </div>
+
+  <!-- 六个爱心入口 -->
+  <div class="hearts" id="hearts"></div>
+
+  <div class="home-footer" id="homeFooter">♡ made with love ♡</div>
+</div>
+
+<script src="config.js"></script>
+<script src="js/store.js"></script>
+<script src="js/shell.js"></script>
+<script src="player.js"></script>
+<script>
+(function () {
+  var g = SITE_CONFIG.global;
+  var home = SITE_CONFIG.home;
+
+  LN.boot({ deco: false });
+  document.title = g.siteTitle;
+  LN.deco(document.getElementById('floatDeco'), 10);
+  document.getElementById('homeBird').innerHTML = LN.birdSvg('lg');
+
+  /* 主页文案 */
+  document.getElementById('homeNames').textContent = g.coupleNames;
+  document.getElementById('homeLoveNote').textContent = g.loveNoteText;
+  document.getElementById('homeSlogan').textContent = g.slogan;
+
+  /* 渲染爱心入口 */
+  var heartsBox = document.getElementById('hearts');
+  home.hearts.forEach(function (h) {
+    var item = document.createElement('div');
+    item.className = 'heart-item';
+
+    var btn = document.createElement('a');
+    btn.className = 'heart-btn';
+    btn.href = h.url || '#';
+    btn.style.setProperty('--heart-color', h.color);
+    btn.innerHTML =
+      '<span class="shape"></span>' +
+      '<span class="heart-content">' +
+        '<span class="heart-icon">' + h.icon + '</span>' +
+        '<span class="heart-label">' + LN.esc(h.label) + '</span>' +
+      '</span>';
+
+    var sub = document.createElement('div');
+    sub.className = 'heart-sub';
+    sub.textContent = h.subLabel || '';
+
+    item.appendChild(btn);
+    item.appendChild(sub);
+    heartsBox.appendChild(item);
+  });
+})();
+</script>
+</body>
+</html>

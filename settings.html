@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>设置</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="float-deco" id="floatDeco"></div>
+
+<div class="page">
+  <header class="topbar">
+    <a class="back-btn" href="index.html" aria-label="返回主页">←</a>
+    <span class="topbar-title" id="pageTitle">设置</span>
+  </header>
+
+  <div class="set-wrap">
+
+    <!-- 朋友圈 -->
+    <div class="set-card">
+      <h2>🐤 朋友圈频率</h2>
+      <div class="set-row2">
+        <div class="set-field">
+          <label>每天最少发几条</label>
+          <div class="stepper">
+            <button class="st-btn" data-minus="momentPerDayMin" type="button">−</button>
+            <input type="number" id="momentPerDayMin" min="0" max="20">
+            <button class="st-btn" data-plus="momentPerDayMin" type="button">+</button>
+          </div>
+        </div>
+        <div class="set-field">
+          <label>每天最多发几条</label>
+          <div class="stepper">
+            <button class="st-btn" data-minus="momentPerDayMax" type="button">−</button>
+            <input type="number" id="momentPerDayMax" min="1" max="20">
+            <button class="st-btn" data-plus="momentPerDayMax" type="button">+</button>
+          </div>
+        </div>
+      </div>
+      <div class="set-row2">
+        <div class="set-field">
+          <label>活跃开始时间（时）</label>
+          <div class="stepper">
+            <button class="st-btn" data-minus="momentFromHour" type="button">−</button>
+            <input type="number" id="momentFromHour" min="0" max="23">
+            <button class="st-btn" data-plus="momentFromHour" type="button">+</button>
+          </div>
+        </div>
+        <div class="set-field">
+          <label>活跃结束时间（时）</label>
+          <div class="stepper">
+            <button class="st-btn" data-minus="momentToHour" type="button">−</button>
+            <input type="number" id="momentToHour" min="0" max="23">
+            <button class="st-btn" data-plus="momentToHour" type="button">+</button>
+          </div>
+        </div>
+      </div>
+      <div class="set-row2">
+        <div class="set-field" style="margin-bottom:0">
+          <label>评论回复延迟 · 最短（秒）</label>
+          <div class="stepper">
+            <button class="st-btn" data-minus="momentCommentDelayMin" type="button">−</button>
+            <input type="number" id="momentCommentDelayMin" min="0" max="600">
+            <button class="st-btn" data-plus="momentCommentDelayMin" type="button">+</button>
+          </div>
+        </div>
+        <div class="set-field" style="margin-bottom:0">
+          <label>评论回复延迟 · 最长（秒）</label>
+          <div class="stepper">
+            <button class="st-btn" data-minus="momentCommentDelayMax" type="button">−</button>
+            <input type="number" id="momentCommentDelayMax" min="1" max="600">
+            <button class="st-btn" data-plus="momentCommentDelayMax" type="button">+</button>
+          </div>
+        </div>
+      </div>
+      <div class="tip">时间全部按<b>北京时间</b>计算。改完保存，下一次打开朋友圈就按新频率来。</div>
+    </div>
+
+    <!-- 写信 -->
+    <div class="set-card">
+      <h2>✉️ 写信频率</h2>
+      <div class="set-row2">
+        <div class="set-field">
+          <label>回信延迟 · 最短（分钟）</label>
+          <div class="stepper">
+            <button class="st-btn" data-minus="letterReplyMinMin" type="button">−</button>
+            <input type="number" id="letterReplyMinMin" min="1" max="600">
+            <button class="st-btn" data-plus="letterReplyMinMin" type="button">+</button>
+          </div>
+        </div>
+        <div class="set-field">
+          <label>回信延迟 · 最长（分钟）</label>
+          <div class="stepper">
+            <button class="st-btn" data-minus="letterReplyMaxMin" type="button">−</button>
+            <input type="number" id="letterReplyMaxMin" min="1" max="600">
+            <button class="st-btn" data-plus="letterReplyMaxMin" type="button">+</button>
+          </div>
+        </div>
+      </div>
+      <div class="set-field">
+        <label>他每天主动写信给我</label>
+        <label class="switch">
+          <input type="checkbox" id="letterActiveEnabled">
+          <span class="track"></span>
+          <span id="switchText">开启</span>
+        </label>
+      </div>
+      <div class="set-field">
+        <label>主动写信的概率：<span class="range-val" id="chanceVal">60%</span></label>
+        <input type="range" id="letterActiveChance" min="0" max="100" step="5" style="width:100%">
+      </div>
+      <div class="set-row2">
+        <div class="set-field" style="margin-bottom:0">
+          <label>主动写信 · 最早（时）</label>
+          <div class="stepper">
+            <button class="st-btn" data-minus="letterActiveFromHour" type="button">−</button>
+            <input type="number" id="letterActiveFromHour" min="0" max="23">
+            <button class="st-btn" data-plus="letterActiveFromHour" type="button">+</button>
+          </div>
+        </div>
+        <div class="set-field" style="margin-bottom:0">
+          <label>主动写信 · 最晚（时）</label>
+          <div class="stepper">
+            <button class="st-btn" data-minus="letterActiveToHour" type="button">−</button>
+            <input type="number" id="letterActiveToHour" min="0" max="23">
+            <button class="st-btn" data-plus="letterActiveToHour" type="button">+</button>
+          </div>
+        </div>
+      </div>
+      <div class="tip">每天最多触发 1 次；概率调成 0 就是完全不主动写信。</div>
+    </div>
+
+    <!-- 聊天 & 学习 -->
+    <div class="set-card">
+      <h2>💬 聊天与学习</h2>
+      <div class="set-field">
+        <label>他的回复延迟：<span class="range-val" id="chatDelayVal">1.0 秒</span></label>
+        <input type="range" id="chatReplyDelayMs" min="300" max="5000" step="100" style="width:100%">
+      </div>
+      <div class="set-row2">
+        <div class="set-field" style="margin-bottom:0">
+          <label>默认专注（分钟）</label>
+          <div class="stepper">
+            <button class="st-btn" data-minus="focusMinutes" type="button">−</button>
+            <input type="number" id="focusMinutes" min="1" max="300">
+            <button class="st-btn" data-plus="focusMinutes" type="button">+</button>
+          </div>
+        </div>
+        <div class="set-field" style="margin-bottom:0">
+          <label>默认休息（分钟）</label>
+          <div class="stepper">
+            <button class="st-btn" data-minus="breakMinutes" type="button">−</button>
+            <input type="number" id="breakMinutes" min="1" max="120">
+            <button class="st-btn" data-plus="breakMinutes" type="button">+</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 数据 -->
+    <div class="set-card">
+      <h2>💾 我的数据</h2>
+      <div class="tip" style="margin-bottom:10px">
+        字卡、聊天记录、朋友圈、信件全都存在这台手机里，不会上传到任何地方。
+        换手机前可以先导出备份。
+      </div>
+      <div class="row" style="gap:8px;flex-wrap:wrap">
+        <button class="btn ghost small" id="exportBtn" type="button">导出备份</button>
+        <button class="btn ghost small" id="importBtn" type="button">导入备份</button>
+        <button class="btn ghost small" id="copyBtn" type="button">复制</button>
+      </div>
+      <div class="field mt12" id="backupField" style="display:none">
+        <textarea id="backupBox" rows="6" spellcheck="false"></textarea>
+      </div>
+      <div class="row mt12" style="gap:8px;flex-wrap:wrap">
+        <button class="btn ghost small" id="clearChat" type="button">清空聊天记录</button>
+        <button class="btn ghost small" id="clearMoments" type="button">清空朋友圈</button>
+        <button class="btn ghost small" id="clearLetters" type="button">清空信匣</button>
+      </div>
+      <div class="set-status" id="status"></div>
+    </div>
+
+    <div class="row" style="gap:10px;margin-bottom:10px">
+      <button class="btn" id="saveBtn" type="button" style="flex:1">保存设置</button>
+      <button class="btn ghost" id="resetBtn" type="button">恢复默认</button>
+    </div>
+
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="js/store.js"></script>
+<script src="js/shell.js"></script>
+<script src="player.js"></script>
+<script>
+(function () {
+  LN.boot({ title: '设置' });
+
+  var STEPS = {
+    momentPerDayMin: 1, momentPerDayMax: 1,
+    momentFromHour: 1, momentToHour: 1,
+    momentCommentDelayMin: 10, momentCommentDelayMax: 10,
+    letterReplyMinMin: 5, letterReplyMaxMin: 5,
+    letterActiveFromHour: 1, letterActiveToHour: 1,
+    focusMinutes: 5, breakMinutes: 1
+  };
+  var NUMBERS = Object.keys(STEPS);
+
+  var st = LN.getSettings();
+  var status = document.getElementById('status');
+
+  function setStatus(text, ok) {
+    status.textContent = text || '';
+    status.className = 'set-status' + (ok ? ' ok' : '');
+  }
+
+  function fill() {
+    NUMBERS.forEach(function (k) { document.getElementById(k).value = st[k]; });
+    document.getElementById('letterActiveEnabled').checked = !!st.letterActiveEnabled;
+    document.getElementById('letterActiveChance').value = st.letterActiveChance;
+    document.getElementById('chatReplyDelayMs').value = st.chatReplyDelayMs;
+    syncLabels();
+  }
+  function syncLabels() {
+    document.getElementById('chanceVal').textContent = st.letterActiveChance + '%';
+    document.getElementById('chatDelayVal').textContent =
+      (Number(st.chatReplyDelayMs) / 1000).toFixed(1) + ' 秒';
+    document.getElementById('switchText').textContent =
+      document.getElementById('letterActiveEnabled').checked ? '开启（每天 0~1 封）' : '关闭';
+  }
+
+  function bump(key, delta) {
+    var el = document.getElementById(key);
+    var v = (Number(el.value) || 0) + delta * STEPS[key];
+    var min = Number(el.getAttribute('min')), max = Number(el.getAttribute('max'));
+    v = Math.max(min, Math.min(max, v));
+    el.value = v;
+    st[key] = v;
+    fixRanges();
+  }
+  function fixRanges() {
+    ['momentPerDay', 'momentCommentDelay', 'letterReply'].forEach(function (pre) {
+      var a = document.getElementById(pre + (pre === 'momentPerDay' ? 'Min' : 'Min'));
+      var b = document.getElementById(pre + (pre === 'momentPerDay' ? 'Max' : 'Max'));
+      if (!a || !b) return;
+      if (Number(b.value) < Number(a.value)) b.value = a.value;
+    });
+    var fh = document.getElementById('momentFromHour'), th = document.getElementById('momentToHour');
+    if (Number(th.value) < Number(fh.value)) th.value = fh.value;
+  }
+
+  LN.$$('[data-minus]').forEach(function (b) {
+    b.addEventListener('click', function () { bump(b.getAttribute('data-minus'), -1); });
+  });
+  LN.$$('[data-plus]').forEach(function (b) {
+    b.addEventListener('click', function () { bump(b.getAttribute('data-plus'), 1); });
+  });
+  document.getElementById('letterActiveEnabled').addEventListener('change', syncLabels);
+  document.getElementById('letterActiveChance').addEventListener('input', function () {
+    st.letterActiveChance = Number(this.value);
+    syncLabels();
+  });
+  document.getElementById('chatReplyDelayMs').addEventListener('input', function () {
+    st.chatReplyDelayMs = Number(this.value);
+    syncLabels();
+  });
+
+  document.getElementById('saveBtn').addEventListener('click', function () {
+    var patch = {};
+    NUMBERS.forEach(function (k) { patch[k] = Number(document.getElementById(k).value); });
+    patch.letterActiveEnabled = document.getElementById('letterActiveEnabled').checked;
+    patch.letterActiveChance = Number(document.getElementById('letterActiveChance').value);
+    patch.chatReplyDelayMs = Number(document.getElementById('chatReplyDelayMs').value);
+    /* 每天最少不能大于最多 */
+    if (patch.momentPerDayMin > patch.momentPerDayMax) patch.momentPerDayMax = patch.momentPerDayMin;
+    if (patch.letterReplyMinMin > patch.letterReplyMaxMin) patch.letterReplyMaxMin = patch.letterReplyMinMin;
+    if (patch.momentFromHour > patch.momentToHour) patch.momentToHour = patch.momentFromHour;
+    st = LN.setSettings(patch);
+    fill();
+    setStatus('已保存 ✓ 频率设置下次打开对应页面就生效。', true);
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', function () {
+    if (!window.confirm('把所有频率恢复成默认？')) return;
+    st = LN.resetSettings();
+    fill();
+    setStatus('已恢复默认 ✓', true);
+  });
+
+  /* ---------------- 备份 ---------------- */
+  var backupBox = document.getElementById('backupBox');
+  var backupField = document.getElementById('backupField');
+
+  document.getElementById('exportBtn').addEventListener('click', function () {
+    var data = {};
+    Object.keys(LN.KEYS).forEach(function (k) {
+      var v = LN.read(LN.KEYS[k], null);
+      if (v !== null) data[LN.KEYS[k]] = v;
+    });
+    backupBox.value = JSON.stringify(data);
+    backupField.style.display = 'block';
+    setStatus('已生成备份，长按全选复制保存起来即可。');
+  });
+  document.getElementById('copyBtn').addEventListener('click', function () {
+    if (!backupBox.value) { setStatus('先点「导出备份」生成内容。'); return; }
+    backupBox.select();
+    try { document.execCommand('copy'); setStatus('已复制到剪贴板 ✓', true); }
+    catch (e) { setStatus('复制失败，请手动长按选择复制。'); }
+  });
+  document.getElementById('importBtn').addEventListener('click', function () {
+    if (!backupBox.value.trim()) {
+      backupField.style.display = 'block';
+      setStatus('把之前导出的内容粘进下面的框里，再点一次「导入备份」。');
+      backupBox.focus();
+      return;
+    }
+    try {
+      var data = JSON.parse(backupBox.value);
+      Object.keys(data).forEach(function (k) { LN.write(k, data[k]); });
+      st = LN.getSettings();
+      fill();
+      setStatus('导入成功 ✓ 字卡、聊天记录、朋友圈、信件都回来了。', true);
+    } catch (e) {
+      setStatus('导入失败：内容不是有效的备份文字。');
+    }
+  });
+
+  /* ---------------- 清空 ---------------- */
+  function clearKey(key, name) {
+    if (!window.confirm('清空' + name + '？这一步不能撤销。')) return;
+    LN.write(key, []);
+    setStatus(name + '已清空。', true);
+  }
+  document.getElementById('clearChat').addEventListener('click', function () { clearKey(LN.KEYS.chatLog, '聊天记录'); });
+  document.getElementById('clearMoments').addEventListener('click', function () {
+    if (!window.confirm('清空朋友圈？这一步不能撤销。')) return;
+    LN.write(LN.KEYS.moments, []);
+    LN.del(LN.KEYS.momentSchedule);
+    setStatus('朋友圈已清空。', true);
+  });
+  document.getElementById('clearLetters').addEventListener('click', function () {
+    if (!window.confirm('清空信匣？这一步不能撤销。')) return;
+    LN.write(LN.KEYS.letters, []);
+    LN.write(LN.KEYS.letterPending, []);
+    setStatus('信匣已清空。', true);
+  });
+
+  fill();
+})();
+</script>
+</body>
+</html>

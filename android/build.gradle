@@ -1,0 +1,4 @@
+// 根工程不需要额外任务，插件在 settings.gradle 里统一声明
+tasks.register('clean', Delete) {
+    delete rootProject.layout.buildDirectory
+}
