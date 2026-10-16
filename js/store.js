@@ -22,6 +22,8 @@
     playlist:        'dz.music.playlist',
     avatars:         'dz.avatars',
     momentsCover:    'dz.moments.cover',
+    stickers:        'dz.stickers',
+    chatPending:     'dz.chat.pending',
     timerPref:       'dz.timer.pref'
   };
 
@@ -137,10 +139,13 @@
       momentCommentDelayMax: num(s.momentCommentDelayMax, 90),
       letterReplyMinMin:     num(s.letterReplyMinMin, 10),
       letterReplyMaxMin:     num(s.letterReplyMaxMin, 60),
-      letterActiveEnabled:   s.letterActiveEnabled !== false,
-      letterActiveChance:    num(s.letterActiveChance, 60),
+      letterActivePerDay:    num(s.letterActivePerDay, 1),
       letterActiveFromHour:  num(s.letterActiveFromHour, 9),
       letterActiveToHour:    num(s.letterActiveToHour, 22),
+      chatReplyDelaySec:     num(s.chatReplyDelaySec, 1),
+      /* 下面两个是老版本的字段，留着只是为了兼容以前保存过的设置 */
+      letterActiveEnabled:   s.letterActiveEnabled !== false,
+      letterActiveChance:    num(s.letterActiveChance, 60),
       chatReplyDelayMs:      num(s.chatReplyDelayMs, 1000),
       focusMinutes:          num(s.focusMinutes, 25),
       breakMinutes:          num(s.breakMinutes, 5)
@@ -258,6 +263,29 @@
   function getCover() { return read(KEYS.momentsCover, '') || ''; }
   function setCover(dataUrl) { write(KEYS.momentsCover, dataUrl || ''); }
   function clearCover() { del(KEYS.momentsCover); }
+
+  /* ---------------- 我的表情包（自己导入的图，存这台设备里） ---------------- */
+  function getStickers() {
+    var v = read(KEYS.stickers, null);
+    return Array.isArray(v) ? v : [];
+  }
+  function addSticker(src) {
+    var list = getStickers();
+    var item = { id: uid(), src: src };
+    list.push(item);
+    write(KEYS.stickers, list);
+    return item;
+  }
+  function removeSticker(id) {
+    var list = getStickers().filter(function (s) { return s.id !== id; });
+    write(KEYS.stickers, list);
+    return list;
+  }
+  function getSticker(id) {
+    var list = getStickers();
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+    return null;
+  }
 
   /* 选一张图 → 居中裁成 w×h → 压成 jpeg dataURL（默认正方形） */
   function pickImage(file, w, h) {
@@ -412,6 +440,8 @@
     getAvatar: getAvatar, setAvatar: setAvatar, clearAvatar: clearAvatar,
     avatarHtml: avatarHtml, pickImage: pickImage,
     getCover: getCover, setCover: setCover, clearCover: clearCover,
+    getStickers: getStickers, addSticker: addSticker,
+    removeSticker: removeSticker, getSticker: getSticker,
     sprite: sprite, birdSvg: birdSvg, deco: deco, toast: toast, boot: boot
   };
 })();

@@ -11,6 +11,6 @@ cp index.html home.html chat.html note.html timer.html music.html \
    moments.html letter.html settings.html \
    style.css player.js config.js "$DEST"/
 
-cp js/store.js js/cards.js js/avatar.js js/shell.js "$DEST"/js/
+cp js/store.js js/cards.js js/avatar.js js/shell.js js/stickers.js "$DEST"/js/
 
 echo "网页文件已同步到 $DEST"

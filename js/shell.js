@@ -13,6 +13,38 @@
   } catch (e) {}
 
   window.LN_HOSTED = hosted;
+
+  /* ----------------------------------------------------
+   * 手机键盘弹起来时，把「可视高度」写进 CSS 变量 --vvh。
+   * 固定布局（聊天页这种）用 height: var(--vvh) 就不会被键盘挡住输入栏。
+   * 这一段不管是不是在壳层里都要跑。
+   * ---------------------------------------------------- */
+  (function () {
+    var vv = window.visualViewport;
+    if (!vv) return;
+    function apply() {
+      document.documentElement.style.setProperty('--vvh', vv.height + 'px');
+    }
+    vv.addEventListener('resize', apply);
+    vv.addEventListener('scroll', apply);
+    apply();
+  })();
+
+  /* 输入时把某个滚动容器拉到底（键盘弹起后不用手动滑） */
+  window.LN.scrollToBottomOnKeyboard = function (scroller) {
+    if (!scroller) return;
+    var t = null;
+    function go() {
+      clearTimeout(t);
+      t = setTimeout(function () {
+        requestAnimationFrame(function () { scroller.scrollTop = scroller.scrollHeight; });
+      }, 260);
+    }
+    document.addEventListener('focusin', function (e) {
+      if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) go();
+    });
+  };
+
   if (!hosted) return;
 
   function ready(fn) {

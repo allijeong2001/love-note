@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>写信给他</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap" rel="stylesheet">
@@ -129,27 +129,40 @@
     renderUnread();
   }
 
-  /* ---------------- 每天 0~1 封主动来信 ---------------- */
+  /* ---------------- 每天 N 封主动来信（N 在设置里改，每天都一定会写） ---------------- */
   function ensureLetterSchedule() {
     var st = LN.getSettings();
     var today = LN.bjDateKey();
     var s = LN.read(LN.KEYS.letterSchedule, null);
-    if (s && s.date === today) return s;
+    if (s && s.date === today && Array.isArray(s.items)) return s;
 
-    var at = null;
-    var will = st.letterActiveEnabled && (Math.random() * 100 < st.letterActiveChance);
-    if (will) {
-      var p = LN.bjParts();
-      var startMin = Math.max(st.letterActiveFromHour * 60, p.h * 60 + p.mi);
-      var endMin = st.letterActiveToHour * 60;
-      var mm = (endMin > startMin)
-        ? startMin + Math.floor(Math.random() * (endMin - startMin + 1))
-        : p.h * 60 + p.mi + LN.randInt(5, 40);
+    var p = LN.bjParts();
+    var nowMin = p.h * 60 + p.mi;
+    var startMin = Math.max(Number(st.letterActiveFromHour) * 60, nowMin + 1);
+    var endMin = Number(st.letterActiveToHour) * 60;
+    var n = Number(st.letterActivePerDay);
+    if (!isFinite(n) || n < 1) n = 1;
+    if (n > 20) n = 20;
+
+    var items = [];
+    for (var i = 0; i < n; i++) {
+      var mm;
+      if (endMin > startMin) {
+        /* 把 N 封信在时间段里摊开，不要都挤在一起 */
+        var seg = (endMin - startMin) / n;
+        mm = Math.round(startMin + seg * i + Math.random() * seg);
+        if (mm > endMin) mm = endMin;
+      } else {
+        mm = nowMin + LN.randInt(5, 40) * (i + 1);
+      }
       var h = Math.floor(mm / 60), mi = mm % 60;
       if (h > 23) { h = 23; mi = 59; }
-      at = LN.bjToTs(p.y, p.m, p.d, h, mi) + Math.floor(Math.random() * 60) * 1000;
+      items.push({
+        at: LN.bjToTs(p.y, p.m, p.d, h, mi) + Math.floor(Math.random() * 60) * 1000,
+        fired: false
+      });
     }
-    s = { date: today, at: at, fired: false };
+    s = { date: today, items: items };
     LN.write(LN.KEYS.letterSchedule, s);
     return s;
   }
@@ -162,15 +175,20 @@
 
     /* 他主动写来的信 */
     var s = ensureLetterSchedule();
-    if (s && s.at && !s.fired && s.at <= now) {
-      s.fired = true;
-      LN.write(LN.KEYS.letterSchedule, s);
-      letters.push({
-        id: LN.uid(), from: 'him',
-        text: LN.pickCard('letter', '……'),
-        time: s.at, replyTo: null
+    var nNew = 0;
+    if (s && s.items) {
+      s.items.forEach(function (it) {
+        if (it.fired || it.at > now) return;
+        it.fired = true;
+        letters.push({
+          id: LN.uid(), from: 'him',
+          text: LN.pickCard('letter', '……'),
+          time: it.at, replyTo: null
+        });
+        got = true;
+        nNew++;
       });
-      got = true;
+      if (nNew) LN.write(LN.KEYS.letterSchedule, s);
     }
 
     /* 回信 */
@@ -196,7 +214,11 @@
       renderUnread();
       if (!boxView.classList.contains('hidden')) renderLetters();
       renderHint();
-      if (document.visibilityState === 'visible') LN.toast('你收到了 ' + HIS + ' 的一封信');
+      if (document.visibilityState === 'visible') {
+        LN.toast(nNew > 1
+          ? '你收到了 ' + HIS + ' 的 ' + nNew + ' 封信'
+          : '你收到了 ' + HIS + ' 的一封信');
+      }
     }
     renderHint();
   }

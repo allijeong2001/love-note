@@ -21,5 +21,6 @@ copy js\store.js "%DEST%\js\" >nul
 copy js\cards.js "%DEST%\js\" >nul
 copy js\avatar.js "%DEST%\js\" >nul
 copy js\shell.js "%DEST%\js\" >nul
+copy js\stickers.js "%DEST%\js\" >nul
 
 echo 网页文件已同步到 %DEST%

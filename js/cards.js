@@ -13,6 +13,7 @@
   var els = {};
   var built = false;
   var sel = {};            // 多选：{ 序号: true }
+  var impLines = [];       // 导入预览里正在编辑的字卡
   var undo = null;         // 上一次删除的内容，用于撤销
   var askCb = null;        // 自定义确认框的回调
 
@@ -38,6 +39,7 @@
           '<div class="card-selbar" id="cardSelBar">' +
             '<span id="cardSelCount">已选 0 张</span>' +
             '<button type="button" id="cardSelAll">全选</button>' +
+            '<button type="button" id="cardSelMerge">合并成一张</button>' +
             '<button type="button" id="cardSelDel" class="danger">删除选中</button>' +
             '<button type="button" id="cardSelNone">取消</button>' +
           '</div>' +
@@ -51,9 +53,14 @@
             '<textarea id="cardBulk" rows="4" ' +
               'placeholder="想你了&#10;早点睡&#10;今天也很喜欢你"></textarea>' +
           '</div>' +
+          '<input type="file" id="cardFile" accept=".json,.txt,application/json" hidden>' +
           '<div class="row mt8" style="gap:10px">' +
             '<button class="btn" id="cardBulkAdd" type="button" style="flex:1">批量添加</button>' +
             '<button class="btn ghost" id="cardAddOne" type="button">+ 单张</button>' +
+          '</div>' +
+          '<div class="row mt8" style="gap:10px">' +
+            '<button class="btn ghost small" id="cardImport" type="button" style="flex:1">📥 导入 JSON</button>' +
+            '<button class="btn ghost small" id="cardSample" type="button" style="flex:1">看 JSON 长啥样</button>' +
           '</div>' +
           '<div class="row mt8" style="gap:10px">' +
             '<button class="btn ghost small" id="cardRestore" type="button" style="flex:1">恢复默认</button>' +
@@ -73,6 +80,27 @@
             '<button type="button" id="cardAskNo">取消</button>' +
           '</div>' +
         '</div>' +
+      '</div>' +
+
+      /* 导入 JSON 之后的预览：可以改、可以删，确认后才真的导入 */
+      '<div class="mask" id="cardImpMask"></div>' +
+      '<div class="dialog card-dialog" id="cardImpDialog">' +
+        '<div class="panel-head">' +
+          '<span class="panel-title">导入预览</span>' +
+          '<button class="icon-btn" id="cardImpClose" type="button">✕</button>' +
+        '</div>' +
+        '<div class="panel-body">' +
+          '<div class="card-lib-hint" id="cardImpHint"></div>' +
+          '<div class="card-imp-list" id="cardImpList"></div>' +
+          '<div class="row mt8" style="gap:10px">' +
+            '<button class="btn ghost small" id="cardImpAdd" type="button">＋ 加一行</button>' +
+            '<span class="card-count" id="cardImpCount"></span>' +
+          '</div>' +
+          '<div class="row mt8" style="gap:10px">' +
+            '<button class="btn" id="cardImpOk" type="button" style="flex:1">导入</button>' +
+            '<button class="btn ghost" id="cardImpNo" type="button">取消</button>' +
+          '</div>' +
+        '</div>' +
       '</div>';
     document.body.appendChild(wrap);
 
@@ -82,12 +110,17 @@
       list: $('cardList'), bulk: $('cardBulk'),
       selBar: $('cardSelBar'), selCount: $('cardSelCount'),
       selAll: $('cardSelAll'), selDel: $('cardSelDel'), selNone: $('cardSelNone'),
+      selMerge: $('cardSelMerge'),
       undoBar: $('cardUndo'), undoText: $('cardUndoText'), undoBtn: $('cardUndoBtn'),
       bulkAdd: $('cardBulkAdd'), addOne: $('cardAddOne'),
+      importBtn: $('cardImport'), sampleBtn: $('cardSample'), file: $('cardFile'),
       restore: $('cardRestore'), clear: $('cardClear'), done: $('cardDone'),
       close: $('cardClose'),
       askMask: $('cardAskMask'), askDialog: $('cardAskDialog'),
-      askText: $('cardAskText'), askOk: $('cardAskOk'), askNo: $('cardAskNo')
+      askText: $('cardAskText'), askOk: $('cardAskOk'), askNo: $('cardAskNo'),
+      impMask: $('cardImpMask'), impDialog: $('cardImpDialog'), impHint: $('cardImpHint'),
+      impList: $('cardImpList'), impAdd: $('cardImpAdd'), impCount: $('cardImpCount'),
+      impOk: $('cardImpOk'), impNo: $('cardImpNo'), impClose: $('cardImpClose')
     };
 
     els.close.addEventListener('click', close);
@@ -145,6 +178,56 @@
         sel = {};
         render();
       });
+    });
+
+    /* 合并选中的字卡 */
+    els.selMerge.addEventListener('click', doMerge);
+
+    /* 导入 JSON 文件：先预览，让你改完再确定 */
+    els.importBtn.addEventListener('click', function () { els.file.click(); });
+    els.file.addEventListener('change', function () {
+      var f = els.file.files && els.file.files[0];
+      els.file.value = '';
+      if (!f) return;
+      var fr = new FileReader();
+      fr.onload = function () {
+        var lines = parseCards(fr.result);
+        if (!lines.length) { window.LN.toast('这个文件里没找到字卡～'); return; }
+        openImport(lines);
+      };
+      fr.onerror = function () { window.LN.toast('文件读不出来，换一个试试'); };
+      fr.readAsText(f, 'utf-8');
+    });
+
+    els.impClose.addEventListener('click', closeImport);
+    els.impNo.addEventListener('click', closeImport);
+    els.impMask.addEventListener('click', closeImport);
+    els.impOk.addEventListener('click', doImport);
+    els.impAdd.addEventListener('click', function () {
+      impLines.push('');
+      renderImport();
+      var rows = els.impList.querySelectorAll('input');
+      if (rows.length) rows[rows.length - 1].focus();
+    });
+    els.impList.addEventListener('input', function (e) {
+      var row = e.target.closest ? e.target.closest('.card-imp-row') : null;
+      if (!row) return;
+      impLines[parseInt(row.getAttribute('data-i'), 10)] = e.target.value;
+      updateImpCount();
+    });
+    els.impList.addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('[data-rm]') : null;
+      if (!b) return;
+      impLines.splice(parseInt(b.getAttribute('data-rm'), 10), 1);
+      renderImport();
+    });
+
+    els.sampleBtn.addEventListener('click', function () {
+      ask('JSON 文件写成下面任意一种都认：\n\n' +
+        '① 直接是数组：\n["想你了", "早点睡", "今天也很喜欢你"]\n\n' +
+        '② 带字段名：\n{ "cards": [{ "text": "想你了" }] }\n\n' +
+        '③ 连 JSON 都不是也行，一行一张的纯文本\n\n' +
+        '重复的会自动跳过，不会变多。', function () {});
     });
 
     /* 列表操作 */
@@ -279,6 +362,156 @@
     });
   }
 
+  /* ---------------- JSON 导入 ---------------- */
+  /* 把各种奇形怪状的 JSON 都摊平成一堆字卡文字 */
+  function toLines(v) {
+    var out = [];
+    if (v == null) return out;
+    if (typeof v === 'string') {
+      String(v).split(/\r?\n/).forEach(function (l) {
+        l = l.replace(/^\s+|\s+$/g, '');
+        if (l) out.push(l);
+      });
+      return out;
+    }
+    if (typeof v === 'number' || typeof v === 'boolean') return [String(v)];
+    if (Array.isArray(v)) {
+      v.forEach(function (x) { out = out.concat(toLines(x)); });
+      return out;
+    }
+    if (typeof v === 'object') {
+      ['text', 'name', 'card', 'content', 'value', 'title',
+       'cards', 'list', 'items', 'data', 'replies',
+       'randomReplies', 'defaultCards'].forEach(function (k) {
+        if (v[k] != null) out = out.concat(toLines(v[k]));
+      });
+      if (!out.length) {
+        Object.keys(v).forEach(function (k) { out = out.concat(toLines(v[k])); });
+      }
+      return out;
+    }
+    return out;
+  }
+
+  function parseCards(raw) {
+    var text = String(raw == null ? '' : raw).replace(/^\s+|\s+$/g, '');
+    if (!text) return [];
+    var data = null, ok = true;
+    try { data = JSON.parse(text); } catch (e) { ok = false; }
+    var lines;
+    if (!ok) {
+      /* 不是 JSON 也认，当纯文本一行一张 */
+      lines = toLines(text);
+    } else {
+      /* 本站导出的整包备份：优先取当前这一套 */
+      var libKey = (window.LN.CARD_LIBS[current] || {}).key;
+      if (data && !Array.isArray(data) && typeof data === 'object' && libKey && data[libKey]) {
+        lines = toLines(data[libKey]);
+      } else {
+        lines = toLines(data);
+      }
+    }
+    var seen = {}, out = [];
+    lines.forEach(function (l) {
+      l = String(l).replace(/^\s+|\s+$/g, '');
+      if (!l || seen[l]) return;
+      seen[l] = 1;
+      out.push(l);
+    });
+    return out;
+  }
+
+  /* ---------------- 导入预览 ---------------- */
+  function openImport(lines) {
+    build();
+    impLines = lines.slice();
+    if (!impLines.length) impLines.push('');
+    renderImport();
+    els.impMask.classList.add('show');
+    els.impDialog.classList.add('show');
+  }
+
+  function renderImport() {
+    var html = '';
+    impLines.forEach(function (t, i) {
+      html += '<div class="card-imp-row" data-i="' + i + '">' +
+        '<input type="text" value="' + window.LN.esc(t) + '">' +
+        '<button type="button" data-rm="' + i + '">✕</button>' +
+        '</div>';
+    });
+    if (!impLines.length) {
+      html = '<div class="card-imp-empty">一行都没有了，点下面「＋ 加一行」自己写一张。</div>';
+    }
+    els.impList.innerHTML = html;
+    els.impHint.textContent = '认出来 ' + impLines.length +
+      ' 条：不对的直接改，不要的点右边 ✕ 删掉，确认没问题再点导入。';
+    updateImpCount();
+  }
+
+  function countImp() {
+    return impLines.filter(function (t) { return String(t).replace(/^\s+|\s+$/g, ''); }).length;
+  }
+  function updateImpCount() {
+    var n = countImp();
+    els.impCount.textContent = '会导入 ' + n + ' 张';
+    els.impOk.textContent = n ? ('导入 ' + n + ' 张') : '导入';
+    els.impOk.disabled = !n;
+  }
+
+  function closeImport() {
+    if (!built) return;
+    els.impMask.classList.remove('show');
+    els.impDialog.classList.remove('show');
+  }
+
+  function doImport() {
+    var vals = impLines
+      .map(function (t) { return String(t).replace(/^\s+|\s+$/g, ''); })
+      .filter(function (t) { return t; });
+    if (!vals.length) { window.LN.toast('没有可以导入的字卡～'); return; }
+    var r = window.LN.addCards(current, vals.join('\n'), true);
+    closeImport();
+    sel = {};
+    render();
+    window.LN.toast('导入 ' + r.added + ' 张' +
+      (r.skipped ? '，跳过重复 ' + r.skipped + ' 张' : ''));
+  }
+
+  /* ---------------- 合并选中的字卡 ---------------- */
+  function joinTexts(arr) {
+    var out = '';
+    arr.forEach(function (t) {
+      if (!out) { out = t; return; }
+      /* 上一张已经有标点就接着写，没有就补个逗号 */
+      out = /[\s，。！？、,.!?~～…：:；;）)]$/.test(out) ? out + t : out + '，' + t;
+    });
+    return out;
+  }
+
+  function doMerge() {
+    var idxs = Object.keys(sel).map(Number).sort(function (a, b) { return a - b; });
+    if (idxs.length < 2) { window.LN.toast('先选 2 张以上再合并～'); return; }
+    var list = window.LN.getCards(current);
+    var texts = idxs.map(function (i) {
+      return String(list[i] == null ? '' : list[i]).replace(/^\s+|\s+$/g, '');
+    }).filter(function (t) { return t; });
+    if (texts.length < 2) { window.LN.toast('选中的字卡是空的'); return; }
+
+    var all = window.LN.getCards(current);
+    all.push(joinTexts(texts));
+    window.LN.setCards(current, all);
+    var at = all.length - 1;
+    sel = {};
+    render();
+    /* 直接打开编辑框，方便再改改 */
+    var row = els.list.querySelector('.card-row[data-i="' + at + '"]');
+    if (row) {
+      if (row.scrollIntoView) row.scrollIntoView({ block: 'center' });
+      startEdit(row, at);
+    }
+    window.LN.toast('已合并成 1 张，原来那几张还留着');
+  }
+
   function visibleIndexes() {
     var kw = (els.search.value || '').trim().toLowerCase();
     var list = window.LN.getCards(current);
@@ -341,6 +574,7 @@
     els.mask.classList.remove('show');
     els.dialog.classList.remove('show');
     answerAsk(false);
+    closeImport();
     refreshBadges();
   }
 
@@ -365,6 +599,9 @@
       slot.textContent = n;
     });
   }
+
+  /* 给别的页面用的自定义确认框（原生 confirm 在内嵌预览里点不动） */
+  window.LN.ask = ask;
 
   window.LN.openCardLibrary = open;
   window.LN.closeCardLibrary = close;

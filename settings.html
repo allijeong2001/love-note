@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>设置</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -100,16 +100,12 @@
         </div>
       </div>
       <div class="set-field">
-        <label>他每天主动写信给我</label>
-        <label class="switch">
-          <input type="checkbox" id="letterActiveEnabled">
-          <span class="track"></span>
-          <span id="switchText">开启</span>
-        </label>
-      </div>
-      <div class="set-field">
-        <label>主动写信的概率：<span class="range-val" id="chanceVal">60%</span></label>
-        <input type="range" id="letterActiveChance" min="0" max="100" step="5" style="width:100%">
+        <label>他每天主动写几封信给我</label>
+        <div class="stepper" style="max-width:170px">
+          <button class="st-btn" data-minus="letterActivePerDay" type="button">−</button>
+          <input type="number" id="letterActivePerDay" min="1" max="20">
+          <button class="st-btn" data-plus="letterActivePerDay" type="button">+</button>
+        </div>
       </div>
       <div class="set-row2">
         <div class="set-field" style="margin-bottom:0">
@@ -129,16 +125,26 @@
           </div>
         </div>
       </div>
-      <div class="tip">每天最多触发 1 次；概率调成 0 就是完全不主动写信。</div>
+      <div class="tip">他每天都一定会主动给你写信，封数在上面改。时间全部按<b>北京时间</b>算。</div>
     </div>
 
-    <!-- 聊天 & 学习 -->
+    <!-- 聊天 -->
     <div class="set-card">
-      <h2>💬 聊天与学习</h2>
+      <h2>💬 聊天</h2>
       <div class="set-field">
-        <label>他的回复延迟：<span class="range-val" id="chatDelayVal">1.0 秒</span></label>
-        <input type="range" id="chatReplyDelayMs" min="300" max="5000" step="100" style="width:100%">
+        <label>他多久才回我（秒）</label>
+        <input type="number" id="chatReplyDelaySec" class="set-input" min="1" step="1"
+               inputmode="numeric" placeholder="比如 3">
+        <div class="tip" style="margin-top:8px">
+          填 1 就是秒回；想让他慢一点就填大一点，比如 300 就是 5 分钟后才回。
+          等他的这段时间里，聊天框会一直显示「…」。
+        </div>
       </div>
+    </div>
+
+    <!-- 学习 -->
+    <div class="set-card">
+      <h2>⏱ 陪伴学习</h2>
       <div class="set-row2">
         <div class="set-field" style="margin-bottom:0">
           <label>默认专注（分钟）</label>
@@ -194,6 +200,7 @@
 <script src="js/store.js"></script>
 <script src="js/shell.js"></script>
 <script src="player.js"></script>
+<script src="js/cards.js"></script>
 <script>
 (function () {
   LN.boot({ title: '设置' });
@@ -203,6 +210,7 @@
     momentFromHour: 1, momentToHour: 1,
     momentCommentDelayMin: 10, momentCommentDelayMax: 10,
     letterReplyMinMin: 5, letterReplyMaxMin: 5,
+    letterActivePerDay: 1,
     letterActiveFromHour: 1, letterActiveToHour: 1,
     focusMinutes: 5, breakMinutes: 1
   };
@@ -218,17 +226,7 @@
 
   function fill() {
     NUMBERS.forEach(function (k) { document.getElementById(k).value = st[k]; });
-    document.getElementById('letterActiveEnabled').checked = !!st.letterActiveEnabled;
-    document.getElementById('letterActiveChance').value = st.letterActiveChance;
-    document.getElementById('chatReplyDelayMs').value = st.chatReplyDelayMs;
-    syncLabels();
-  }
-  function syncLabels() {
-    document.getElementById('chanceVal').textContent = st.letterActiveChance + '%';
-    document.getElementById('chatDelayVal').textContent =
-      (Number(st.chatReplyDelayMs) / 1000).toFixed(1) + ' 秒';
-    document.getElementById('switchText').textContent =
-      document.getElementById('letterActiveEnabled').checked ? '开启（每天 0~1 封）' : '关闭';
+    document.getElementById('chatReplyDelaySec').value = st.chatReplyDelaySec;
   }
 
   function bump(key, delta) {
@@ -257,22 +255,11 @@
   LN.$$('[data-plus]').forEach(function (b) {
     b.addEventListener('click', function () { bump(b.getAttribute('data-plus'), 1); });
   });
-  document.getElementById('letterActiveEnabled').addEventListener('change', syncLabels);
-  document.getElementById('letterActiveChance').addEventListener('input', function () {
-    st.letterActiveChance = Number(this.value);
-    syncLabels();
-  });
-  document.getElementById('chatReplyDelayMs').addEventListener('input', function () {
-    st.chatReplyDelayMs = Number(this.value);
-    syncLabels();
-  });
-
   document.getElementById('saveBtn').addEventListener('click', function () {
     var patch = {};
     NUMBERS.forEach(function (k) { patch[k] = Number(document.getElementById(k).value); });
-    patch.letterActiveEnabled = document.getElementById('letterActiveEnabled').checked;
-    patch.letterActiveChance = Number(document.getElementById('letterActiveChance').value);
-    patch.chatReplyDelayMs = Number(document.getElementById('chatReplyDelayMs').value);
+    var sec = Number(document.getElementById('chatReplyDelaySec').value);
+    patch.chatReplyDelaySec = (isFinite(sec) && sec >= 1) ? Math.floor(sec) : 1;
     /* 每天最少不能大于最多 */
     if (patch.momentPerDayMin > patch.momentPerDayMax) patch.momentPerDayMax = patch.momentPerDayMin;
     if (patch.letterReplyMinMin > patch.letterReplyMaxMin) patch.letterReplyMaxMin = patch.letterReplyMinMin;
@@ -283,10 +270,13 @@
   });
 
   document.getElementById('resetBtn').addEventListener('click', function () {
-    if (!window.confirm('把所有频率恢复成默认？')) return;
-    st = LN.resetSettings();
-    fill();
-    setStatus('已恢复默认 ✓', true);
+    /* 用自己画的确认框，内嵌预览和 APP 里都点得动 */
+    LN.ask('把所有频率恢复成默认？', function (ok) {
+      if (!ok) return;
+      st = LN.resetSettings();
+      fill();
+      setStatus('已恢复默认 ✓', true);
+    });
   });
 
   /* ---------------- 备份 ---------------- */
@@ -329,22 +319,28 @@
 
   /* ---------------- 清空 ---------------- */
   function clearKey(key, name) {
-    if (!window.confirm('清空' + name + '？这一步不能撤销。')) return;
-    LN.write(key, []);
-    setStatus(name + '已清空。', true);
+    LN.ask('清空' + name + '？这一步不能撤销。', function (ok) {
+      if (!ok) return;
+      LN.write(key, []);
+      setStatus(name + '已清空。', true);
+    });
   }
   document.getElementById('clearChat').addEventListener('click', function () { clearKey(LN.KEYS.chatLog, '聊天记录'); });
   document.getElementById('clearMoments').addEventListener('click', function () {
-    if (!window.confirm('清空朋友圈？这一步不能撤销。')) return;
-    LN.write(LN.KEYS.moments, []);
-    LN.del(LN.KEYS.momentSchedule);
-    setStatus('朋友圈已清空。', true);
+    LN.ask('清空朋友圈？这一步不能撤销。', function (ok) {
+      if (!ok) return;
+      LN.write(LN.KEYS.moments, []);
+      LN.del(LN.KEYS.momentSchedule);
+      setStatus('朋友圈已清空。', true);
+    });
   });
   document.getElementById('clearLetters').addEventListener('click', function () {
-    if (!window.confirm('清空信匣？这一步不能撤销。')) return;
-    LN.write(LN.KEYS.letters, []);
-    LN.write(LN.KEYS.letterPending, []);
-    setStatus('信匣已清空。', true);
+    LN.ask('清空信匣？这一步不能撤销。', function (ok) {
+      if (!ok) return;
+      LN.write(LN.KEYS.letters, []);
+      LN.write(LN.KEYS.letterPending, []);
+      setStatus('信匣已清空。', true);
+    });
   });
 
   fill();

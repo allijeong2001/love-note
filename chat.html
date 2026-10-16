@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>聊天</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -19,6 +19,7 @@
   <main class="chat-messages" id="messages"></main>
 
   <footer class="chat-input-bar">
+    <button class="sticker-btn" id="stickerBtn" type="button" title="表情包">😊</button>
     <input type="text" id="chatInput" autocomplete="off" maxlength="500">
     <button id="sendBtn"></button>
   </footer>
@@ -29,6 +30,8 @@
 <script src="js/shell.js"></script>
 <script src="player.js"></script>
 <script src="js/cards.js"></script>
+<script src="js/avatar.js"></script>
+<script src="js/stickers.js"></script>
 <script>
 (function () {
   var g = SITE_CONFIG.global;
@@ -47,6 +50,7 @@
 
   var msgBox = document.getElementById('messages');
   var waiting = false;
+  var replyTimer = null;
 
   /* ---------- 本地聊天记录 ---------- */
   function loadLog() {
@@ -62,6 +66,21 @@
     return mine.indexOf('<img') === 0 ? mine : LN.esc(c.userAvatarText || '我');
   }
 
+  function avColor(who) {
+    return who === 'partner'
+      ? (c.partnerAvatarColor || '#c9a3ff')
+      : (c.userAvatarColor || '#ffa8cd');
+  }
+
+  /* ---------- 头像：点气泡上的小头像就能换 ---------- */
+  msgBox.addEventListener('click', function (e) {
+    var av = e.target.closest ? e.target.closest('.avatar[data-av]') : null;
+    if (av) LN.openAvatar(av.getAttribute('data-av'));
+  });
+  LN.onAvatarChange(function () { renderAll(); });
+  /* 键盘弹起来时自动滑到最新一条，不用自己拖 */
+  LN.scrollToBottomOnKeyboard(msgBox);
+
   function scrollToBottom() {
     requestAnimationFrame(function () { msgBox.scrollTop = msgBox.scrollHeight; });
   }
@@ -75,13 +94,17 @@
 
   function renderMsg(m) {
     var el = document.createElement('div');
-    el.className = 'msg ' + m.who;
+    el.className = 'msg ' + m.who + (m.sticker ? ' is-sticker' : '');
     el.innerHTML =
-      '<div class="avatar" style="background:' +
-        (m.who === 'partner' ? (c.partnerAvatarColor || '#c9a3ff') : (c.userAvatarColor || '#ffa8cd')) +
-      '">' + avatarHtml(m.who) + '</div>' +
-      '<div class="bubble"></div>';
-    el.querySelector('.bubble').textContent = m.text;
+      '<div class="avatar" data-av="' + (m.who === 'partner' ? 'him' : 'me') +
+        '" style="background:' + avColor(m.who) + '" title="点一下换头像">' +
+        avatarHtml(m.who) + '</div>' +
+      (m.sticker ? '<div class="sticker-wrap"></div>' : '<div class="bubble"></div>');
+    if (m.sticker) {
+      el.querySelector('.sticker-wrap').innerHTML = LN.stickerHtml(m.sticker);
+    } else {
+      el.querySelector('.bubble').textContent = m.text;
+    }
     msgBox.appendChild(el);
   }
 
@@ -104,9 +127,10 @@
     scrollToBottom();
   }
 
-  function push(who, text) {
+  function push(who, text, sticker) {
     var log = loadLog();
-    var m = { who: who, text: text, time: Date.now() };
+    var m = { who: who, text: text || '', time: Date.now() };
+    if (sticker) m.sticker = sticker;
     var first = !log.length;
     log.push(m);
     saveLog(log);
@@ -118,12 +142,14 @@
     return m;
   }
 
+  /* ---------- 他那句「正在输入…」 ---------- */
   function addTyping() {
+    removeTyping();
     var msg = document.createElement('div');
     msg.className = 'msg partner';
     msg.id = 'typingMsg';
     msg.innerHTML =
-      '<div class="avatar" style="background:' + (c.partnerAvatarColor || '#c9a3ff') + '">' + avatarHtml('partner') + '</div>' +
+      '<div class="avatar" style="background:' + avColor('partner') + '">' + avatarHtml('partner') + '</div>' +
       '<div class="bubble"><span class="typing-dots"><i></i><i></i><i></i></span></div>';
     msgBox.appendChild(msg);
     scrollToBottom();
@@ -133,32 +159,94 @@
     if (t && t.parentNode) t.parentNode.removeChild(t);
   }
 
+  /* ---------- 回复延迟 ---------- */
+  function delaySec() {
+    var st = LN.getSettings();
+    var s = Number(st.chatReplyDelaySec);
+    if (!isFinite(s) || s <= 0) {
+      /* 老版本存的是毫秒 */
+      s = Math.round((Number(st.chatReplyDelayMs) || 1000) / 1000);
+    }
+    if (!isFinite(s) || s < 1) s = 1;
+    return s;
+  }
+
+  var PENDING = LN.KEYS.chatPending;
+
+  function startReply() {
+    var at = Date.now() + delaySec() * 1000;
+    LN.write(PENDING, { at: at });
+    waiting = true;
+    sendBtn.disabled = true;
+    addTyping();               /* 整个等待期间都显示省略号 */
+    scheduleReply(at);
+  }
+
+  function scheduleReply(at) {
+    clearTimeout(replyTimer);
+    replyTimer = setTimeout(deliverReply, Math.max(0, at - Date.now()));
+  }
+
+  /* 他回什么全看心情：
+   *   大部分时候是一张字卡，偶尔光丢个表情包过来，
+   *   也偶尔先说一句话再丢个表情包（不会每次都一样） */
+  function partnerReply() {
+    var card = LN.pickCard('chat', '（他好像还没学会这句话）');
+    var hasSticker = typeof LN.randomSticker === 'function';
+    var r = Math.random();
+    if (hasSticker && r < 0.18) {
+      push('partner', '', LN.randomSticker());
+    } else if (hasSticker && r < 0.42) {
+      push('partner', card);
+      push('partner', '', LN.randomSticker());
+    } else {
+      push('partner', card);
+    }
+  }
+
+  function deliverReply() {
+    clearTimeout(replyTimer);
+    LN.del(PENDING);
+    removeTyping();
+    partnerReply();
+    waiting = false;
+    sendBtn.disabled = false;
+  }
+
+  /* 上次没等到他回就走了？回来接着等 / 直接补上 */
+  function resumeReply() {
+    var p = LN.read(PENDING, null);
+    if (!p || !p.at) return;
+    if (p.at <= Date.now()) {
+      deliverReply();
+    } else {
+      waiting = true;
+      sendBtn.disabled = true;
+      addTyping();
+      scheduleReply(p.at);
+    }
+  }
+
   /* ---------- 发送 ---------- */
   function send() {
     var text = input.value.trim();
     if (!text || waiting) return;
     input.value = '';
     push('user', text);
-    waiting = true;
-    sendBtn.disabled = true;
-
-    var st = LN.getSettings();
-    var delay = Number(st.chatReplyDelayMs) || 1000;
-
-    setTimeout(function () { addTyping(); }, Math.max(0, delay - 700));
-    setTimeout(function () {
-      removeTyping();
-      var reply = LN.pickCard('chat', '（他好像还没学会这句话）');
-      push('partner', reply);
-      waiting = false;
-      sendBtn.disabled = false;
-    }, delay);
+    startReply();
   }
 
   sendBtn.addEventListener('click', send);
   input.addEventListener('keydown', function (e) { if (e.key === 'Enter') send(); });
 
+  /* ---------- 表情包 ---------- */
+  LN.bindStickerButton(document.getElementById('stickerBtn'), function (p) {
+    push('user', '', p);
+    if (!waiting) startReply();
+  });
+
   renderAll();
+  resumeReply();
 })();
 </script>
 </body>

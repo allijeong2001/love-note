@@ -180,10 +180,12 @@ img { max-width: 100%; display: block; }
 .mask.show { opacity: 1; pointer-events: auto; }
 .dialog {
   position: fixed;
-  left: 50%; bottom: 0;
+  left: 50%;
+  /* 键盘弹起来时整个弹窗跟着往上抬，不会被键盘压住 */
+  bottom: max(0px, calc(100vh - var(--vvh, 100vh)));
   transform: translate(-50%, 110%);
   width: min(440px, 100%);
-  max-height: 88vh;
+  max-height: min(88vh, calc(var(--vvh, 100vh) - 12px));
   background: #fffafc;
   border-radius: 24px 24px 0 0;
   box-shadow: 0 -8px 40px rgba(150, 110, 180, .28);
@@ -376,6 +378,8 @@ img { max-width: 100%; display: block; }
  * ===================================================== */
 .chat-app {
   position: fixed; inset: 0;
+  /* 键盘弹起来时 --vvh 会变小，输入栏就跟着浮在键盘上面 */
+  height: var(--vvh, 100%);
   max-width: 480px; margin: 0 auto;
   display: flex; flex-direction: column;
   background: transparent;
@@ -1043,7 +1047,8 @@ body.has-actionbar .mini-player { bottom: calc(84px + env(safe-area-inset-bottom
 }
 .moments-empty .bird-svg { margin: 0 auto 10px; }
 .moments-bar {
-  position: fixed; left: 50%; bottom: 0;
+  position: fixed; left: 50%;
+  bottom: max(0px, calc(100vh - var(--vvh, 100vh)));
   transform: translateX(-50%);
   width: min(480px, 100%);
   display: flex; gap: 10px;
@@ -1238,6 +1243,151 @@ body.has-actionbar .mini-player { bottom: calc(84px + env(safe-area-inset-bottom
   background: linear-gradient(135deg, var(--purple), var(--pink));
   color: #fff; border: none; font-weight: 700;
 }
+
+/* =====================================================
+ * 聊天：顶部双方头像（点一下就能换）
+ * ===================================================== */
+.chat-header .chat-av {
+  position: relative; flex: none;
+  width: 32px; height: 32px; padding: 0;
+  border: none; background: none; cursor: pointer;
+}
+.chat-header .chat-av-in {
+  display: flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--purple), #e0cbff);
+  color: #fff; font-size: 13px; font-weight: 700;
+  box-shadow: var(--shadow-sm); overflow: hidden;
+}
+.chat-header .chat-av.mine .chat-av-in { background: linear-gradient(135deg, var(--pink), #ffd3e6); }
+.chat-header .chat-av-in img { width: 100%; height: 100%; object-fit: cover; }
+.chat-header .chat-av-in svg { width: 68%; height: 68%; }
+.chat-header .chat-av-edit {
+  position: absolute; right: -3px; bottom: -3px;
+  width: 15px; height: 15px; border-radius: 50%;
+  background: #fff; box-shadow: var(--shadow-sm);
+  font-size: 8px; line-height: 15px; text-align: center;
+}
+.msg .avatar { cursor: pointer; }
+
+/* =====================================================
+ * 表情包
+ * ===================================================== */
+.sticker-btn {
+  flex: none; width: 38px; height: 38px; border: none; border-radius: 50%;
+  background: rgba(255, 255, 255, .92); font-size: 19px;
+  box-shadow: var(--shadow-sm); cursor: pointer;
+}
+.sticker-btn:active { transform: scale(.92); }
+
+.msg.is-sticker .sticker-wrap { padding: 2px; }
+.sticker-wrap .stk {
+  display: inline-flex; flex-direction: column; align-items: center; gap: 3px;
+  min-width: 74px; padding: 10px 12px;
+  background: rgba(255, 255, 255, .96);
+  border-radius: 16px; box-shadow: var(--shadow-sm);
+}
+.sticker-wrap .stk i { font-size: 33px; font-style: normal; line-height: 1.1; }
+.sticker-wrap .stk b { font-size: 11.5px; font-weight: 600; color: var(--purple-dp); }
+.sticker-wrap .stk-img {
+  display: block; max-width: 132px; max-height: 132px;
+  border-radius: 14px; box-shadow: var(--shadow-sm);
+}
+.sticker-wrap .stk-gone { font-size: 12px; color: var(--muted); }
+
+.stk-mask { z-index: 120; }
+.stk-panel {
+  position: fixed; left: 50%;
+  bottom: max(0px, calc(100vh - var(--vvh, 100vh)));
+  transform: translateX(-50%) translateY(110%);
+  width: 100%; max-width: 460px;
+  max-height: calc(var(--vvh, 100vh) - 12px);
+  background: #fff; border-radius: 20px 20px 0 0;
+  box-shadow: 0 -8px 30px rgba(178, 140, 205, .3);
+  z-index: 121; display: flex; flex-direction: column;
+  padding: 10px 12px calc(12px + env(safe-area-inset-bottom));
+  transition: transform .26s cubic-bezier(.2, 1, .3, 1);
+}
+.stk-panel.show { transform: translateX(-50%) translateY(0); }
+.stk-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.stk-title { font-size: 14.5px; font-weight: 700; color: var(--purple-dp); letter-spacing: 1px; }
+.stk-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; }
+.stk-tab {
+  flex: none; padding: 5px 14px; border: none; border-radius: 999px;
+  background: rgba(201, 163, 255, .14); color: var(--purple-dp);
+  font-size: 12.5px; cursor: pointer;
+}
+.stk-tab.on { background: linear-gradient(135deg, var(--purple), var(--pink)); color: #fff; }
+.stk-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  max-height: 40vh; overflow-y: auto; padding: 8px 2px;
+}
+.stk-item {
+  position: relative; min-height: 76px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  padding: 8px 4px; border-radius: 14px;
+  background: linear-gradient(135deg, #f6eaff, #ffeef6);
+  cursor: pointer;
+}
+.stk-item:active { transform: scale(.95); }
+.stk-item .stk-emoji { font-size: 28px; font-style: normal; line-height: 1.1; }
+.stk-item .stk-label { font-size: 10.5px; font-weight: 600; color: #7a5285; }
+.stk-item img { width: 56px; height: 56px; object-fit: contain; }
+.stk-del {
+  position: absolute; right: 2px; top: 2px;
+  width: 17px; height: 17px; border-radius: 50%;
+  background: rgba(255, 255, 255, .95); color: #e0648c;
+  font-size: 10px; font-style: normal; line-height: 17px; text-align: center;
+  box-shadow: var(--shadow-sm);
+}
+.stk-empty {
+  grid-column: 1 / -1; text-align: center;
+  font-size: 12.5px; color: var(--muted); padding: 22px 0; line-height: 1.8;
+}
+.stk-foot { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+.stk-tip { flex: 1; min-width: 120px; font-size: 11px; color: var(--muted); }
+
+/* 设置里的数字输入框 */
+.set-input {
+  width: 100%; height: 40px; border-radius: 999px;
+  border: 1.5px solid var(--line); outline: none;
+  background: #fff; padding: 0 14px; font-size: 14px; color: var(--text-color);
+}
+
+/* =====================================================
+ * 手机上别乱跳：不自动放大、不要橡皮筋、点按钮不延迟
+ * ===================================================== */
+html, body { overscroll-behavior-y: none; }
+/* 输入框小于 16px 时 iOS/安卓会自动放大整个页面 —— 这里统一 16px */
+input[type="text"], input[type="search"], input[type="number"],
+input[type="password"], input[type="email"], input:not([type]), textarea {
+  font-size: 16px;
+}
+button, .btn, a, label, .chip-btn, .icon-btn { touch-action: manipulation; }
+.chat-messages, .card-lib-list, .card-imp-list, .stk-grid, .moments-list {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* =====================================================
+ * 字卡库 · 导入预览（可以改完再导入）
+ * ===================================================== */
+.card-imp-list {
+  max-height: 40vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 2px; margin: 0 -2px;
+}
+.card-imp-row { display: flex; align-items: center; gap: 6px; }
+.card-imp-row input {
+  flex: 1; min-width: 0; height: 38px; border-radius: 10px;
+  border: 1.5px solid var(--line); outline: none;
+  background: #fff; padding: 0 12px; font-size: 16px; color: var(--text-color);
+}
+.card-imp-row button {
+  flex: none; width: 30px; height: 30px; border-radius: 50%; border: none;
+  background: rgba(249, 127, 174, .16); color: #e0648c; font-size: 12px; cursor: pointer;
+}
+.card-imp-empty { text-align: center; font-size: 12.5px; color: var(--muted); padding: 18px 0; }
 
 /* =====================================================
  * 壳层（index.html 用 iframe 装页面，音乐不中断）
