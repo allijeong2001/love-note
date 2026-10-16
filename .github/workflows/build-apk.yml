@@ -55,16 +55,22 @@ jobs:
         working-directory: android
         run: gradle assembleDebug --no-daemon --stacktrace
 
+      - name: 把 APK 改成 jiangningcharlie.apk
+        run: |
+          mv android/app/build/outputs/apk/debug/app-debug.apk \
+             android/app/build/outputs/apk/debug/jiangningcharlie.apk
+          ls -lh android/app/build/outputs/apk/debug/
+
       - name: 上传 APK 到构建产物
         uses: actions/upload-artifact@v4
         with:
-          name: lovenote-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: jiangningcharlie-apk
+          path: android/app/build/outputs/apk/debug/jiangningcharlie.apk
 
       - name: 打 tag 时顺手发一个 Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: android/app/build/outputs/apk/debug/app-debug.apk
+          files: android/app/build/outputs/apk/debug/jiangningcharlie.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
