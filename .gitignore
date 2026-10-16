@@ -11,3 +11,6 @@ android/app/src/main/assets/www/*
 .idea/
 .DS_Store
 Thumbs.db
+
+# APK 构建产物
+*.apk
