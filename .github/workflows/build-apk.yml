@@ -19,8 +19,26 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # 注意：不要再用 android-actions/setup-android@v3，
+      # 它调用 sdkmanager 时在新版 Runner 上会直接 exit 1（该动作已停止维护）。
+      # ubuntu-latest 镜像自带 Android SDK，这里只补许可证和需要的组件。
       - name: 准备 Android SDK
-        uses: android-actions/setup-android@v3
+        run: |
+          set -e
+          export SDK="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          echo "SDK=$SDK"
+          mkdir -p "$SDK/licenses"
+          printf '\n24333f8a63b6825ea9c5514f83c2829b004d1fee\n' > "$SDK/licenses/android-sdk-license"
+          printf '\n84831b9409646a918e30573bab4c9c91346d8abd\n' > "$SDK/licenses/android-sdk-preview-license"
+          CM=$(ls -d "$SDK"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -n 1 || true)
+          echo "sdkmanager=$CM"
+          if [ -n "$CM" ]; then
+            yes | "$CM" --licenses > /dev/null 2>&1 || true
+            "$CM" --install "platforms;android-34" "build-tools;34.0.0" "platform-tools" > /dev/null 2>&1 \
+              || echo "sdkmanager 安装失败，交给 Gradle 自动下载所需组件"
+          fi
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
 
       - name: 安装 Gradle 8.5
         run: |
